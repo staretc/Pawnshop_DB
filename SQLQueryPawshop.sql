@@ -208,10 +208,89 @@ group by Redemption_Info, Sale_Info
 
 -- 1.4 Таблица [Contract]
 
+-- (1) группировка с подытогом (rollup) по Client_SNILS и Sale_Info
+-- Подытог будет для каждого Client_SNILS и всей выборки целиком
 
+select 
+	isnull(cast (Client_SNILS as nvarchar), N'TOTAL') as Client_SNILS,	-- заполняем TOTAL через isnull
+	iif(grouping(Sale_Info) = 1, N'TOTAL', Sale_Info) as Sale_Info,		-- заполняем TOTAL через grouping
+	count(Item_ID) as Items
+from [Contract]
+group by rollup (Client_SNILS, Sale_Info)
+
+-- (2) группировка с подытогом (cube) по СНИЛСу и Инфо о продаже
+-- Подытог будет для каждого Sale_Info и каждого Client_SNILS
+
+select 
+	isnull(cast (Client_SNILS as nvarchar), N'TOTAL') as Client_SNILS,	-- заполняем TOTAL через isnull
+	iif(grouping(Sale_Info) = 1, N'TOTAL', Sale_Info) as Sale_Info,		-- заполняем TOTAL через grouping
+	count(Item_ID) as Items
+from [Contract]
+group by cube (Client_SNILS, Sale_Info)
+
+-- (3) группировка с выборкой всех групп (all), где подсчитываем клиентов, группируя по Sale_Info
+select
+	count(Client_SNILS) as Clients,
+	Sale_Info
+from [Contract]
+-- where Sale_Info = N'On Sale'		-- можно написать условие, тогда в Clients будут нули везде кроме выбранного Sale_Info
+group by all Sale_Info
 
 -- 1.5 Таблица Material, вывести названия, где нет последовательности "iu"
 
 select Periodic_Table_Name
 from Material
 where Periodic_Table_Name not like '%iu%'
+
+-- 2.
+-- 2.1 
+-- (1) Таблицы Item и Item_Type, заменим Item.Type_ID на Item_Type.Name
+
+select
+	Item.ID as ID,
+	Item.Wear as Wear,
+	Item_Type.[Name] as [Type_Name]
+from Item, Item_Type
+where Item.[Type_ID] = Item_Type.ID
+
+-- (2) Таблицы Item_Contains_Material и Material, заменим Item_Contains_Material.Material_Name на Material.Periodic_Table_Name
+
+select
+	Item_Contains_Material.Item_ID as Item_ID,
+	Material.Periodic_Table_Name as Material_Name
+from Item_Contains_Material, Material
+where Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
+
+-- 2.2 Меняем запросы из 2.1 c where на join
+-- (1)
+
+select
+	Item.ID as ID,
+	Item.Wear as Wear,
+	Item_Type.[Name] as [Type_Name]
+from Item join Item_Type on Item.[Type_ID] = Item_Type.ID
+
+-- (2)
+
+select
+	Item_Contains_Material.Item_ID as Item_ID,
+	Material.Periodic_Table_Name as Material_Name
+from Item_Contains_Material join Material on Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
+
+-- 2.3 
+
+
+
+-- 2.4 
+
+
+
+-- 2.5 
+
+
+
+-- 2.6 
+
+
+
+-- 2.7 
