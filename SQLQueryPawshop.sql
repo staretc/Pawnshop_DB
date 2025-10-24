@@ -61,7 +61,8 @@ values
 	(N'Цепочка'),
 	(N'Часы'),
 	(N'Слиток'),
-	(N'Монета')
+	(N'Монета'),
+	(N'Серьги')
 
 insert into Material
 values
@@ -118,7 +119,8 @@ values
 	(107,N'Руднева Татьяна Алексеевна',N'Слепнёва, 16',1001,100007),
 	(108,N'Немчанинов Владимир Витальевич',N'Родниковая, 11',1001,100008),
 	(109,N'Латыпов Арсен Айдарович',N'Гагарина, 52',1001,100009),
-	(110,N'Энэнов Энэн Энэнович',N'Энэнова, 0',1001,100010)
+	(110,N'Энэнов Энэн Энэнович',N'Энэнова, 0',1001,100010),
+	(111,N'Зубенко Михаил Петрович',N'Мафиозово, 777',1002,100001)
 
 insert into [Contract] ([Date], Date_Of_Redemption, Comission, Redemption_Info, Sale_Info, Client_SNILS, Item_ID)
 values
@@ -178,6 +180,7 @@ from [Contract]
 where Comission >= 200 and Date_Of_Redemption > '2025-09-25'
 
 -- 1.3 Таблица [Contract]
+-- (1) Выведем общее количество контрактов с информацией о минимальной, максимальной и средней сумме комиссии
 
 select 
 	COUNT(*) as Total_Contracts,
@@ -185,6 +188,9 @@ select
 	MAX(Comission) as Max_Comission,
 	AVG(Comission) as Average_Comission
 from [Contract]
+
+-- (2) Для каждого статуса выкупа выведем общее количество контрактов 
+-- с информацией о минимальной, максимальной и средней сумме комиссии
 
 select 
 	Redemption_Info,
@@ -194,6 +200,9 @@ select
 	AVG(Comission) as Average_Comission
 from [Contract]
 group by Redemption_Info
+
+-- (3) Для каждой пары статуса выкупа и статуса продажи выведем общее количество контрактов 
+-- с информацией о минимальной, максимальной и средней сумме комиссии
 
 select 
 	Redemption_Info,
@@ -253,7 +262,8 @@ select
 from Item, Item_Type
 where Item.[Type_ID] = Item_Type.ID
 
--- (2) Таблицы Item_Contains_Material и Material, заменим Item_Contains_Material.Material_Name на Material.Periodic_Table_Name
+-- (2) Таблицы Item_Contains_Material и Material, 
+-- заменим Item_Contains_Material.Material_Name на Material.Periodic_Table_Name
 
 select
 	Item_Contains_Material.Item_ID as Item_ID,
@@ -278,19 +288,197 @@ select
 from Item_Contains_Material join Material on Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
 
 -- 2.3 
+-- (1) Узнаем, какие договоры есть у всех клиентов из базы
 
+select
+	Client.SNILS as SNILS,
+	isnull(cast([Contract].Number as varchar), 'No Contracts') as Contract_Number
+from Client left join [Contract] on Client.SNILS = [Contract].Client_SNILS
 
+-- (2) Узнаем, на какие изделия всех типов из базы были заключены договоры
 
--- 2.4 
+select
+	isnull(cast([Contract].Number as varchar), 'No Contracts') as Contract_Number,
+	isnull(cast(Item.ID as varchar), 'No Items') as Item_ID,
+	Item_Type.Name as Item_Type
+from  Item_Type
+left join Item on Item_Type.ID = Item.Type_ID
+left join [Contract] on Item.ID = [Contract].Item_ID
 
+-- 2.4 Перепишем запросы из 2.3 на right join
+-- (1)
 
+select
+	Client.SNILS as SNILS,
+	isnull(cast([Contract].Number as varchar), 'No Contracts') as Contract_Number
+from [Contract] right join Client on Client.SNILS = [Contract].Client_SNILS
+
+-- (2)
+
+select
+	isnull(cast([Contract].Number as varchar), 'No Contracts') as Contract_Number,
+	isnull(cast(Item.ID as varchar), 'No Items') as Item_ID,
+	Item_Type.Name as Item_Type
+from [Contract] 
+join Item on Item.ID = [Contract].Item_ID 
+right join Item_Type on Item_Type.ID = Item.Type_ID
 
 -- 2.5 
+-- (1) Посчитаем количество контрактов для каждого клиента
 
+select
+	Client.SNILS as SNILS,
+	count([Contract].Number) as Num_Of_Contracts
+from Client 
+left join [Contract] on Client.SNILS = [Contract].Client_SNILS
+group by Client.SNILS
 
+-- (2) Посчитаем наибольшие комиссионные с одного заказа для каждого клиента
+
+select
+	Client.SNILS as SNILS,
+	isnull(cast(max([Contract].Comission) as varchar), 'No Contracts') as Max_Comission
+from Client 
+left join [Contract] on Client.SNILS = [Contract].Client_SNILS
+group by Client.SNILS
 
 -- 2.6 
 
+-- (1) Выведем клиентов, чьи товары были проданы ломбардом
 
+select
+	Client.SNILS as SNILS
+from Client 
+join [Contract] on Client.SNILS = [Contract].Client_SNILS
+group by Client.SNILS, [Contract].Sale_Info
+having [Contract].Sale_Info = N'Sold'
+
+-- (2) Выведем клиентов, у которых есть контракты на часы
+
+select
+	Client.SNILS as SNILS
+from Client 
+join [Contract] on Client.SNILS = [Contract].Client_SNILS
+join [Item] on Item.ID = [Contract].Item_ID
+join [Item_Type] on Item_Type.ID = Item.[Type_ID]
+group by Client.SNILS, Item_Type.[Name]
+having Item_Type.[Name] = N'Часы'
 
 -- 2.7 
+
+-- (1) Найдём самый частовстречаемый материал в товарах в базе
+
+select top 1 with ties
+	materials_in_items.Material as Material
+from (
+	select
+		Item_Contains_Material.Material_Name as Material,
+		count(Item.ID) as Count_Items
+	from Item
+	join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+	group by Item_Contains_Material.Material_Name
+	) materials_in_items
+order by materials_in_items.Count_Items
+
+-- (2) Найдём клиентов, у которых нет активных договоров
+-- (все контракты имеют Redemption_Info = N'Redeemed' / Sale_Info = N'Sold' / догвооров нет)
+
+select *
+from Client
+where Client.SNILS not in (
+	select
+		Client.SNILS as SNILS
+	from Client 
+	join [Contract] on Client.SNILS = [Contract].Client_SNILS
+	where [Contract].Redemption_Info = N'Not redeemed'
+	or [Contract].Sale_Info = N'Sold'
+	)
+
+-- (3) Найдём материалы, стоимость за грамм которых > 1
+
+select *
+from Material
+where exists (
+	select *
+	from Item_Contains_Material
+	where Item_Contains_Material.Material_Name = Material.Periodic_Table_Name 
+	and Material.Cost_Per_Gramm > 1
+	)
+
+-- 3.
+-- 3.1 
+-- (1) Представление для запроса из 2.5 (1)
+
+create view Count_Contracts_per_Client
+as 
+	select
+		Client.SNILS as SNILS,
+		count([Contract].Number) as Num_Of_Contracts
+	from Client 
+	left join [Contract] on Client.SNILS = [Contract].Client_SNILS
+	group by Client.SNILS
+
+-- Проверка таблицы
+
+select *
+from Count_Contracts_per_Client
+
+-- (2) Представление для запроса из 2.7 (2)
+
+create view Clients_With_No_Active_Contracts
+as
+	select *
+	from Client
+	where Client.SNILS not in (
+		select
+			Client.SNILS as SNILS
+		from Client 
+		join [Contract] on Client.SNILS = [Contract].Client_SNILS
+		where [Contract].Redemption_Info = N'Not redeemed'
+		or [Contract].Sale_Info = N'Sold'
+		)
+
+-- Проверка таблицы
+
+select *
+from Clients_With_No_Active_Contracts
+
+-- 3.2
+-- (1) Найдём максимальные комиссионные среди всех контрактов для каждого типа товара из базы данных
+
+with
+item_types_and_comissions as (
+	select
+		Item_Type.[Name] as [Type],
+		[Contract].Comission as Comission
+	from [Contract]
+	join Item on Item.ID = [Contract].Item_ID
+	right join Item_Type on Item_Type.ID = Item.[Type_ID]
+	)
+select
+	item_types_and_comissions.[Type] as [Type],
+	isnull(max(item_types_and_comissions.Comission), 0) as Max_Comission
+from item_types_and_comissions
+group by item_types_and_comissions.[Type]
+
+-- (2) Найдём клиентов, у которых в товарах есть такие материалы,
+-- где общий вес со всех товаров > 100
+
+with
+clients_and_item_materials as (
+	select
+		Client.SNILS as SNILS,
+		Item_Contains_Material.Material_Name as Material,
+		sum(Item_Contains_Material.[Weight]) as Total_Weight
+	from Client
+	join [Contract] on [Contract].Client_SNILS = Client.SNILS
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+	group by Client.SNILS, Item_Contains_Material.Material_Name
+	)
+select *
+from clients_and_item_materials
+where clients_and_item_materials.Total_Weight > 100
+
+-- 4.
+-- 4.1
