@@ -106,7 +106,15 @@ values
 	(7,N'Aurum',1000),
 	(8,N'Platinum',200),
 	(8,N'Aurum',50),
-	(9,N'Cuprum',500)
+	(9,N'Cuprum',500),
+	(10,N'Iridium',50),
+	(10,N'Ferrum',55),
+	(11,N'Aurum',30),
+	(12,N'Titanium',130),
+	(13,N'Argentum',25),
+	(13,N'Platinum',3),
+	(14,N'Cuprum',125),
+	(14,N'Aurum',10)
 
 insert into Client
 values
@@ -147,8 +155,12 @@ select *
 from Client
 select *
 from [Contract]
+select *
+from Item
+left join Item_Contains_Material on Item.ID = Item_Contains_Material.Item_ID
 
 -- Лаба 3
+-- ЧАСТЬ 1
 -- 1.
 -- 1.1 Таблица [Contract], сортировка по дате и комиссии
 
@@ -482,3 +494,245 @@ where clients_and_item_materials.Total_Weight > 100
 
 -- 4.
 -- 4.1
+-- (1) По каждому клиенту вывести список материалов, сожержащихся с их товарах
+
+select
+	row_number() over (partition by Client.SNILS order by Item_Contains_Material.Material_Name) as Num,
+	Client.SNILS as SNILS,
+	isnull(Item_Contains_Material.Material_Name, N'NO ITEMS') as Material
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS, Item_Contains_Material.Material_Name
+
+-- (2) Вывести топ клиентов по весу материалов со всех изделий
+
+select
+	rank() over(order by sum(Item_Contains_Material.[Weight]) desc) as [Rank],
+	Client.SNILS as SNILS,
+	isnull(sum(Item_Contains_Material.[Weight]), 0) as Total_Weight
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS
+
+-- (3) Предыдущий запрос, но топ без учёта повторяющихся строк
+
+select
+	dense_rank() over(order by sum(Item_Contains_Material.[Weight]) desc) as [Rank],
+	Client.SNILS as SNILS,
+	isnull(sum(Item_Contains_Material.[Weight]), 0) as Total_Weight
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS
+
+-- 5.
+-- 5.1
+-- (1) Найдём тех клиентов, которые сдавали только золотые изделия весом больше 10 г
+
+select
+	Client.SNILS as SNILS,
+	Item.ID as Item_ID,
+	Item_Contains_Material.Material_Name as Material,
+	sum(Item_Contains_Material.[Weight]) as Total_Weight
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
+having Item_Contains_Material.Material_Name = N'Aurum'
+intersect
+select
+	Client.SNILS as SNILS,
+	Item.ID as Item_ID,
+	Item_Contains_Material.Material_Name as Material,
+	sum(Item_Contains_Material.[Weight]) as Total_Weight
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
+having sum(Item_Contains_Material.[Weight]) > 10
+
+-- (2) Найдём тех клиентов, которые сдавали только золотые изделия или изделия весом больше 100 г
+
+select
+	Client.SNILS as SNILS,
+	Item.ID as Item_ID,
+	Item_Contains_Material.Material_Name as Material,
+	sum(Item_Contains_Material.[Weight]) as Total_Weight
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
+having Item_Contains_Material.Material_Name = N'Aurum'
+union 
+select
+	Client.SNILS as SNILS,
+	Item.ID as Item_ID,
+	Item_Contains_Material.Material_Name as Material,
+	sum(Item_Contains_Material.[Weight]) as Total_Weight
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
+having sum(Item_Contains_Material.[Weight]) > 100
+
+-- (3) Найдём тех клиентов, которые сдавали золотые изделия, но не сдавали платиновые изделия
+
+select
+	Client.SNILS as SNILS,
+	Item.ID as Item_ID,
+	Item_Contains_Material.Material_Name as Material
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
+having Item_Contains_Material.Material_Name = N'Aurum'
+except 
+select
+	Client.SNILS as SNILS,
+	Item.ID as Item_ID,
+	Item_Contains_Material.Material_Name as Material
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
+having Item_Contains_Material.Material_Name = N'Platinum'
+
+-- 6.
+-- 6.1
+-- (1) Посчитаем для каждого клиента, сколько грамм золота в содержится в его товарах 
+
+select
+	Client.SNILS as SNILS,
+	sum(case
+	when Item_Contains_Material.Material_Name = N'Aurum' then Item_Contains_Material.[Weight]
+	else 0
+	end) as Aurum_Amount
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+left join Item on Item.ID = [Contract].Item_ID
+left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+group by Client.SNILS
+
+-- (2) Посчитаем постоянных клиентов (есть два и более контракта, заключённых в разные дни)
+
+select
+	Client.SNILS as SNILS,
+	(case
+	when count(distinct [Contract].[Date]) > 1 then 'regular customer'
+	else 'just customer'
+	end) Is_Regular
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+group by Client.SNILS
+
+-- 6.2
+-- (1) Для каждого клиента выведем, сколько в его товарах золота, серебра и платины
+
+select
+	SNILS,
+	isnull([Aurum], 0) as Aurum, 
+	isnull([Argentum], 0) as Argentum, 
+	isnull([Platinum], 0) as Platinum
+from (
+	select
+		Client.SNILS as SNILS,
+		Item_Contains_Material.Material_Name as Material,
+		Item_Contains_Material.[Weight] as [Weight]
+	from Client
+	left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+	left join Item on Item.ID = [Contract].Item_ID
+	left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+	) as materials_and_gramms
+pivot (sum(materials_and_gramms.[Weight]) for materials_and_gramms.Material in ([Aurum], [Argentum], [Platinum])) as p
+
+-- (2) Вернём запрос из 6.2 (1) к виду вложенного запроса 
+-- (с отличием в виде того, что останутся только 3 выбранные материала)
+
+select
+	SNILS,
+	Material,
+	[Weight]
+from (
+	select
+		SNILS,
+		isnull([Aurum], 0) as Aurum, 
+		isnull([Argentum], 0) as Argentum, 
+		isnull([Platinum], 0) as Platinum
+	from (
+		select
+			Client.SNILS as SNILS,
+			Item_Contains_Material.Material_Name as Material,
+			Item_Contains_Material.[Weight] as [Weight]
+		from Client
+		left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+		left join Item on Item.ID = [Contract].Item_ID
+		left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+		) as materials_and_gramms
+	pivot (sum(materials_and_gramms.[Weight]) for materials_and_gramms.Material in ([Aurum], [Argentum], [Platinum])) as p
+	) as pivoted
+unpivot ([Weight] for Material in ([Aurum], [Argentum], [Platinum])) as unp
+
+-- ЧАСТЬ 2
+-- (a) Выдать список товаров, выставленных на продажу
+
+select
+	Item_ID
+from [Contract]
+where Sale_Info = N'On sale'
+
+-- (b) Выдать список товаров, принятых в залог (дата, вид товара, количество)
+
+select
+	[Contract].[Date] as [Date],
+	Item_Type.[Name] as [Type],
+	1 as [Count]
+from [Contract]
+join Item on Item.ID = [Contract].Item_ID
+join Item_Type on Item_Type.ID = Item.[Type_ID]
+where [Contract].Redemption_Info = N'Not redeemed' and [Contract].Sale_Info <> N'Sold'
+
+-- (c) Найти выручку ломбарда от комиссионных с начала текущего года для каждого вида товара
+
+select 
+	Item_Type.[Name] as [Type],
+	sum([Contract].Comission) as Total_Comission
+from [Contract]
+join Item on Item.ID = [Contract].Item_ID
+join Item_Type on Item_Type.ID = Item.[Type_ID]
+where [Contract].[Date] > '01.01.2025'
+group by Item_Type.[Name]
+
+-- (d) Найти клиентов, которые не выкупили свой товар в срок
+
+select
+	Client.SNILS as SNILS
+from Client
+join [Contract] on [Contract].Client_SNILS = Client.SNILS
+where [Contract].Sale_Info <> 'Not on sale'
+
+-- (e) Найти клиентов, пользовавшихся услугами ломбарда 2 и более раз и всегда выкупавших все свои товары
+
+select
+	Client.SNILS as SNILS
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+group by Client.SNILS
+having count([Contract].[Date]) > 1
+except
+select
+	Client.SNILS as SNILS
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+where [Contract].Redemption_Info = N'Not Redeemed'
+group by Client.SNILS
