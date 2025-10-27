@@ -148,9 +148,9 @@ values
 	('2025-03-12','2025-04-12',220.0,N'Not redeemed',N'On sale',110,14)
 
 select *
-from Item
+from Item_Contains_Material
 select *
-from Item_Type
+from Material
 select *
 from Client
 select *
@@ -228,7 +228,6 @@ group by Redemption_Info, Sale_Info
 
 
 -- 1.4 Таблица [Contract]
-
 -- (1) группировка с подытогом (rollup) по Client_SNILS и Sale_Info
 -- Подытог будет для каждого Client_SNILS и всей выборки целиком
 
@@ -250,6 +249,7 @@ from [Contract]
 group by cube (Client_SNILS, Sale_Info)
 
 -- (3) группировка с выборкой всех групп (all), где подсчитываем клиентов, группируя по Sale_Info
+
 select
 	count(Client_SNILS) as Clients,
 	Sale_Info
@@ -307,7 +307,7 @@ select
 	isnull(cast([Contract].Number as varchar), 'No Contracts') as Contract_Number
 from Client left join [Contract] on Client.SNILS = [Contract].Client_SNILS
 
--- (2) Узнаем, на какие изделия всех типов из базы были заключены договоры
+-- (2) Узнаем, какие контракты были заключены на изделия всех типов
 
 select
 	isnull(cast([Contract].Number as varchar), 'No Contracts') as Contract_Number,
@@ -377,7 +377,7 @@ group by Client.SNILS, Item_Type.[Name]
 having Item_Type.[Name] = N'Часы'
 
 -- 2.7 
-
+	
 -- (1) Найдём самый частовстречаемый материал в товарах в базе
 
 select top 1 with ties
@@ -390,7 +390,7 @@ from (
 	join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
 	group by Item_Contains_Material.Material_Name
 	) materials_in_items
-order by materials_in_items.Count_Items
+order by materials_in_items.Count_Items desc
 
 -- (2) Найдём клиентов, у которых нет активных договоров
 -- (все контракты имеют Redemption_Info = N'Redeemed' / Sale_Info = N'Sold' / догвооров нет)
@@ -398,12 +398,12 @@ order by materials_in_items.Count_Items
 select *
 from Client
 where Client.SNILS not in (
-	select
+	select distinct
 		Client.SNILS as SNILS
 	from Client 
 	join [Contract] on Client.SNILS = [Contract].Client_SNILS
-	where [Contract].Redemption_Info = N'Not redeemed'
-	or [Contract].Sale_Info = N'Sold'
+	where [Contract].Redemption_Info = N'Not redeemed' 
+	and [Contract].Sale_Info in (N'Not on sale', N'On Sale')
 	)
 
 -- (3) Найдём материалы, стоимость за грамм которых > 1
@@ -532,7 +532,7 @@ group by Client.SNILS
 
 -- 5.
 -- 5.1
--- (1) Найдём тех клиентов, которые сдавали только золотые изделия весом больше 10 г
+-- (1) Найдём тех клиентов, которые сдавали золотые изделия весом больше 10 г
 
 select
 	Client.SNILS as SNILS,
@@ -558,7 +558,7 @@ left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
 group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
 having sum(Item_Contains_Material.[Weight]) > 10
 
--- (2) Найдём тех клиентов, которые сдавали только золотые изделия или изделия весом больше 100 г
+-- (2) Найдём тех клиентов, которые сдавали золотые изделия или изделия весом больше 100 г
 
 select
 	Client.SNILS as SNILS,
@@ -657,7 +657,8 @@ from (
 pivot (sum(materials_and_gramms.[Weight]) for materials_and_gramms.Material in ([Aurum], [Argentum], [Platinum])) as p
 
 -- (2) Вернём запрос из 6.2 (1) к виду вложенного запроса 
--- (с отличием в виде того, что останутся только 3 выбранные материала)
+-- (с отличием в виде того, что вместо содержащихся материалов в товарах 
+-- всё ещё будет статистика по трём выбранным материалам)
 
 select
 	SNILS,
