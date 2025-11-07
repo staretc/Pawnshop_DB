@@ -162,34 +162,27 @@ left join Item_Contains_Material on Item.ID = Item_Contains_Material.Item_ID
 -- Лаба 3
 -- ЧАСТЬ 1
 -- 1.
--- 1.1 Таблица [Contract], сортировка по дате и комиссии
+-- 1.1 Таблица [Contract], отсортируем по дате контракта по возрастанию
+-- и по дате выкупа по убыванию
+-- FIXED --
 
 select *
 from [Contract]
-order by [Date]
-
-select *
-from [Contract]
-order by Comission
+order by [Date], Date_Of_Redemption desc
 
 -- 1.2 Таблица [Contract], Условия:
--- (1) Дата контракта раньше 1 августа 2025
+-- FIXED --
+-- (1) Выведем контракты, оформленные раньше 1 августа 2025
 
 select *
 from [Contract]
 where [Date] < '2025-08-01'
 
--- (2) Товар продан
+-- (2) Вывести контракты, товары в которых были проданы ломбардом
 
 select *
 from [Contract]
 where Sale_Info = N'Sold'
-
--- (3) Комиссия не меньше 200 и дата выкупа позже 25 сентября 2025
-
-select *
-from [Contract]
-where Comission >= 200 and Date_Of_Redemption > '2025-09-25'
 
 -- 1.3 Таблица [Contract]
 -- (1) Выведем общее количество контрактов с информацией о минимальной, максимальной и средней сумме комиссии
@@ -249,13 +242,14 @@ from [Contract]
 group by cube (Client_SNILS, Sale_Info)
 
 -- (3) группировка с выборкой всех групп (all), где подсчитываем клиентов, группируя по Sale_Info
+-- FIXED --
 
 select
 	count(Client_SNILS) as Clients,
 	Sale_Info
 from [Contract]
--- where Sale_Info = N'On Sale'		-- можно написать условие, тогда в Clients будут нули везде кроме выбранного Sale_Info
-group by all Sale_Info
+where Sale_Info = N'On Sale'	-- делаем выборку только тех, где статус продажи = 'On Sale'
+group by all Sale_Info			-- тогда в Clients будут нули везде кроме выбранного Sale_Info
 
 -- 1.5 Таблица Material, вывести названия, где нет последовательности "iu"
 
@@ -265,7 +259,8 @@ where Periodic_Table_Name not like '%iu%'
 
 -- 2.
 -- 2.1 
--- (1) Таблицы Item и Item_Type, заменим Item.Type_ID на Item_Type.Name
+-- FIXED --
+-- (1) Выведем таблицу Item, но вместо ID типа товара выведем название этого типа
 
 select
 	Item.ID as ID,
@@ -274,14 +269,19 @@ select
 from Item, Item_Type
 where Item.[Type_ID] = Item_Type.ID
 
--- (2) Таблицы Item_Contains_Material и Material, 
--- заменим Item_Contains_Material.Material_Name на Material.Periodic_Table_Name
+-- (2) Выведем таблицу контрактов, но вместо СНИЛС клиена выведем его ФИО
 
 select
-	Item_Contains_Material.Item_ID as Item_ID,
-	Material.Periodic_Table_Name as Material_Name
-from Item_Contains_Material, Material
-where Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
+	[Contract].Number,
+	[Contract].[Date],
+	[Contract].Date_Of_Redemption,
+	[Contract].Comission,
+	[Contract].Redemption_Info,
+	[Contract].Sale_Info,
+	Client.Fullname as Client_Name,
+	[Contract].Item_ID
+from [Contract], Client
+where [Contract].Client_SNILS = Client.SNILS
 
 -- 2.2 Меняем запросы из 2.1 c where на join
 -- (1)
@@ -293,11 +293,18 @@ select
 from Item join Item_Type on Item.[Type_ID] = Item_Type.ID
 
 -- (2)
+-- FIXED --
 
 select
-	Item_Contains_Material.Item_ID as Item_ID,
-	Material.Periodic_Table_Name as Material_Name
-from Item_Contains_Material join Material on Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
+	[Contract].Number,
+	[Contract].[Date],
+	[Contract].Date_Of_Redemption,
+	[Contract].Comission,
+	[Contract].Redemption_Info,
+	[Contract].Sale_Info,
+	Client.Fullname as Client_Name,
+	[Contract].Item_ID
+from [Contract] join Client on [Contract].Client_SNILS = Client.SNILS
 
 -- 2.3 
 -- (1) Узнаем, какие договоры есть у всех клиентов из базы
@@ -336,61 +343,68 @@ join Item on Item.ID = [Contract].Item_ID
 right join Item_Type on Item_Type.ID = Item.Type_ID
 
 -- 2.5 
+-- FIXED --
 -- (1) Посчитаем количество контрактов для каждого клиента
 
 select
-	Client.SNILS as SNILS,
+	Client.Fullname as [Name],
 	count([Contract].Number) as Num_Of_Contracts
 from Client 
 left join [Contract] on Client.SNILS = [Contract].Client_SNILS
-group by Client.SNILS
+group by Client.Fullname
 
 -- (2) Посчитаем наибольшие комиссионные с одного заказа для каждого клиента
 
 select
-	Client.SNILS as SNILS,
+	Client.Fullname as Client,
 	isnull(cast(max([Contract].Comission) as varchar), 'No Contracts') as Max_Comission
 from Client 
 left join [Contract] on Client.SNILS = [Contract].Client_SNILS
-group by Client.SNILS
+group by Client.Fullname
 
 -- 2.6 
+-- FIXED --
+-- (1) Найти клиентов, у которых общая комиссия по всем контрактам превышает 500
 
--- (1) Выведем клиентов, чьи товары были проданы ломбардом
-
-select
-	Client.SNILS as SNILS
-from Client 
+select 
+    Client.Fullname,
+    sum([Contract].Comission) as Total_Commission
+from Client
 join [Contract] on Client.SNILS = [Contract].Client_SNILS
-group by Client.SNILS, [Contract].Sale_Info
-having [Contract].Sale_Info = N'Sold'
+group by Client.Fullname
+having sum([Contract].Comission) > 500
 
--- (2) Выведем клиентов, у которых есть контракты на часы
+-- (2) Найдём контракты, где общая стоимость материалов в товаре > 800
 
-select
-	Client.SNILS as SNILS
-from Client 
-join [Contract] on Client.SNILS = [Contract].Client_SNILS
-join [Item] on Item.ID = [Contract].Item_ID
-join [Item_Type] on Item_Type.ID = Item.[Type_ID]
-group by Client.SNILS, Item_Type.[Name]
-having Item_Type.[Name] = N'Часы'
+select 
+    [Contract].Number as [Contract],
+    round(sum(Material.Cost_Per_Gramm * Item_Contains_Material.[Weight]), 2) as Total_Material_Cost
+from [Contract]
+join Item on [Contract].Item_ID = Item.ID
+join Item_Contains_Material on Item.ID = Item_Contains_Material.Item_ID
+join Material on Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
+group by [Contract].Number
+having sum(Material.Cost_Per_Gramm * Item_Contains_Material.Weight) > 800
 
 -- 2.7 
-	
--- (1) Найдём самый частовстречаемый материал в товарах в базе
+-- (1) Для каждого клиента найти общую стоимость всех материалов в контрактах
+-- FIXED --
 
-select top 1 with ties
-	materials_in_items.Material as Material
-from (
-	select
-		Item_Contains_Material.Material_Name as Material,
-		count(Item.ID) as Count_Items
-	from Item
-	join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
-	group by Item_Contains_Material.Material_Name
-	) materials_in_items
-order by materials_in_items.Count_Items desc
+select 
+    Client.Fullname,
+    Client.SNILS,
+    round(isnull(total_cost.Total_Material_Cost, 0), 2) AS Total_Material_Cost
+from Client
+left join (
+    select 
+        [Contract].Client_SNILS as SNILS,
+        sum(Material.Cost_Per_Gramm * Item_Contains_Material.[Weight]) as Total_Material_Cost
+    from [Contract]
+    join Item on [Contract].Item_ID = Item.ID
+    join Item_Contains_Material on Item.ID = Item_Contains_Material.Item_ID
+    join Material on Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
+    GROUP BY [Contract].Client_SNILS
+) as total_cost on Client.SNILS = total_cost.SNILS;
 
 -- (2) Найдём клиентов, у которых нет активных договоров
 -- (все контракты имеют Redemption_Info = N'Redeemed' / Sale_Info = N'Sold' / догвооров нет)
@@ -406,16 +420,21 @@ where Client.SNILS not in (
 	and [Contract].Sale_Info in (N'Not on sale', N'On Sale')
 	)
 
--- (3) Найдём материалы, стоимость за грамм которых > 1
+-- (3)  Изделия, которые содержат хотя бы один материал дороже 90 usd/грамм
+-- FIXED --
 
-select *
-from Material
+select 
+	Item.ID, 
+	Item_Type.[Name] as Item_Type
+from Item
+join Item_Type on Item.[Type_ID] = Item_Type.ID
 where exists (
-	select *
-	from Item_Contains_Material
-	where Item_Contains_Material.Material_Name = Material.Periodic_Table_Name 
-	and Material.Cost_Per_Gramm > 1
-	)
+    select *
+    from Item_Contains_Material
+    join Material on Item_Contains_Material.Material_Name = Material.Periodic_Table_Name
+    where Item_Contains_Material.Item_ID = Item.ID
+    and Material.Cost_Per_Gramm > 90
+);
 
 -- 3.
 -- 3.1 
@@ -506,7 +525,8 @@ left join Item on Item.ID = [Contract].Item_ID
 left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
 group by Client.SNILS, Item_Contains_Material.Material_Name
 
--- (2) Вывести топ клиентов по весу материалов со всех изделий
+-- (2) Вывести ранжированный список клиентов по весу материалов со всех изделий
+-- FIXED --
 
 select
 	rank() over(order by sum(Item_Contains_Material.[Weight]) desc) as [Rank],
@@ -518,7 +538,10 @@ left join Item on Item.ID = [Contract].Item_ID
 left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
 group by Client.SNILS
 
--- (3) Предыдущий запрос, но топ без учёта повторяющихся строк
+-- (3) Предыдущий запрос, но ранжированный список без учёта повторяющихся строк
+-- Это значит, что при наличии n>1 кандидата на одну и ту же позицию списка, 
+-- следующая позиция начнётся со следующего числа (без пропуска n-1 позиций как в rank())
+-- FIXED --
 
 select
 	dense_rank() over(order by sum(Item_Contains_Material.[Weight]) desc) as [Rank],
@@ -532,7 +555,8 @@ group by Client.SNILS
 
 -- 5.
 -- 5.1
--- (1) Найдём тех клиентов, которые сдавали золотые изделия весом больше 10 г
+-- FIXED --
+-- (1) Найдём тех клиентов, которые сдавали изделия содержащие золото и весом > 10 грамм
 
 select
 	Client.SNILS as SNILS,
@@ -543,8 +567,8 @@ from Client
 left join [Contract] on [Contract].Client_SNILS = Client.SNILS
 left join Item on Item.ID = [Contract].Item_ID
 left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+where Item_Contains_Material.Material_Name = N'Aurum'
 group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
-having Item_Contains_Material.Material_Name = N'Aurum'
 intersect
 select
 	Client.SNILS as SNILS,
@@ -558,7 +582,8 @@ left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
 group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
 having sum(Item_Contains_Material.[Weight]) > 10
 
--- (2) Найдём тех клиентов, которые сдавали золотые изделия или изделия весом больше 100 г
+-- (2) Найдём тех клиентов, которые сдавали изделия, содержащие золото
+-- или изделия, где вес одного из материалов больше 100 г
 
 select
 	Client.SNILS as SNILS,
@@ -588,25 +613,23 @@ having sum(Item_Contains_Material.[Weight]) > 100
 
 select
 	Client.SNILS as SNILS,
-	Item.ID as Item_ID,
-	Item_Contains_Material.Material_Name as Material
+	Item.ID as Item_ID
 from Client
 left join [Contract] on [Contract].Client_SNILS = Client.SNILS
 left join Item on Item.ID = [Contract].Item_ID
 left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
-group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
-having Item_Contains_Material.Material_Name = N'Aurum'
+where Item_Contains_Material.Material_Name = N'Aurum'
+group by Client.SNILS, Item.ID
 except 
 select
 	Client.SNILS as SNILS,
-	Item.ID as Item_ID,
-	Item_Contains_Material.Material_Name as Material
+	Item.ID as Item_ID
 from Client
 left join [Contract] on [Contract].Client_SNILS = Client.SNILS
 left join Item on Item.ID = [Contract].Item_ID
 left join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
-group by Client.SNILS, Item.ID, Item_Contains_Material.Material_Name
-having Item_Contains_Material.Material_Name = N'Platinum'
+where Item_Contains_Material.Material_Name = N'Platinum'
+group by Client.SNILS, Item.ID
 
 -- 6.
 -- 6.1
@@ -687,9 +710,12 @@ unpivot ([Weight] for Material in ([Aurum], [Argentum], [Platinum])) as unp
 -- ЧАСТЬ 2
 -- (a) Выдать список товаров, выставленных на продажу
 
-select
-	Item_ID
+select 
+	Item.ID,
+	Item_Type.[Name]
 from [Contract]
+join Item on [Contract].Item_ID = Item.Id
+join Item_Type on Item_Type.ID = Item.[Type_ID]
 where Sale_Info = N'On sale'
 
 -- (b) Выдать список товаров, принятых в залог (дата, вид товара, количество)
@@ -697,43 +723,81 @@ where Sale_Info = N'On sale'
 select
 	[Contract].[Date] as [Date],
 	Item_Type.[Name] as [Type],
-	1 as [Count]
+	count(Item.ID) as [Count]
 from [Contract]
 join Item on Item.ID = [Contract].Item_ID
 join Item_Type on Item_Type.ID = Item.[Type_ID]
 where [Contract].Redemption_Info = N'Not redeemed' and [Contract].Sale_Info <> N'Sold'
+group by [Contract].[Date], Item_Type.[Name]
 
 -- (c) Найти выручку ломбарда от комиссионных с начала текущего года для каждого вида товара
 
-select 
-	Item_Type.[Name] as [Type],
-	sum([Contract].Comission) as Total_Comission
-from [Contract]
-join Item on Item.ID = [Contract].Item_ID
-join Item_Type on Item_Type.ID = Item.[Type_ID]
-where [Contract].[Date] > '01.01.2025'
-group by Item_Type.[Name]
+select
+	Item_Type.[Name],
+	isnull(counted_comission.Total_Comission, 0) as Total_Comission
+from (
+	select 
+		Item_Type.[Name] as [Type],
+		sum([Contract].Comission) as Total_Comission
+	from [Contract]
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Type on Item_Type.ID = Item.[Type_ID]
+	where year([Contract].[Date]) = year(getdate())
+	group by Item_Type.[Name]
+	) counted_comission
+right join Item_Type on counted_comission.[Type] = Item_Type.[Name]
 
 -- (d) Найти клиентов, которые не выкупили свой товар в срок
+-- вместо getdate() берём '2025-09-01'
 
 select
 	Client.SNILS as SNILS
 from Client
 join [Contract] on [Contract].Client_SNILS = Client.SNILS
-where [Contract].Sale_Info <> 'Not on sale'
+where [Contract].Date_Of_Redemption > '2025-09-25'
+and [Contract].Redemption_Info = 'Not Redeemed'
 
 -- (e) Найти клиентов, пользовавшихся услугами ломбарда 2 и более раз и всегда выкупавших все свои товары
+-- вместо getdate() берём '2025-09-23'
 
-select
-	Client.SNILS as SNILS
+with
+regulars as (	-- выбирем тех, кто пользовался 2 и более раз
+select				
+	Client.SNILS as SNILS,
+	count([Contract].[Date]) as [Count]
 from Client
 left join [Contract] on [Contract].Client_SNILS = Client.SNILS
 group by Client.SNILS
 having count([Contract].[Date]) > 1
+),
+having_active as (	-- выбираем тех, у кого активные заказы
+select distinct		
+	Client_SNILS as SNILS,
+	count([Contract].[Date]) as [Count]
+from Client
+left join [Contract] on [Contract].Client_SNILS = Client.SNILS
+where [Contract].Redemption_Info = 'Not Redeemed' and [Contract].Sale_Info <> 'Sold'
+group by Client_SNILS
+),
+regulars_with_no_actives as ( -- вычитаем активные заказы у постоянных
+select 
+	regulars.SNILS as s1,
+	having_active.SNILS as s2,
+	case
+		when having_active.SNILS is not null then (regulars.[Count] - having_active.[Count])
+		else regulars.[Count]
+	end [Count]
+from regulars
+left join having_active on regulars.SNILS = having_active.SNILS
+)
+select 
+	s1 as SNILS
+from regulars_with_no_actives
+where [Count] >=2
 except
-select
+select			-- исключаем тех, кто не выкупил свои товары (есть товар на продаже / проданный товар)
 	Client.SNILS as SNILS
 from Client
 left join [Contract] on [Contract].Client_SNILS = Client.SNILS
-where [Contract].Redemption_Info = N'Not Redeemed'
+where [Contract].Sale_Info <> N'Not on sale'
 group by Client.SNILS
