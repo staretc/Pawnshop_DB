@@ -66,24 +66,19 @@ values
 
 insert into Material
 values
+	(N'Argentum', 1.03),
+	(N'Aurum', 93.07),
+	(N'Cuprum', 0.01)
 	(N'Ferrum', 0.8),
-	(N'Palladium', 42.68),
-	(N'Rhodium', 438.6),
 	(N'Iridium', 187.23),
+	(N'Palladium', 42.68),
+	(N'Platinum', 31.45),
+	(N'Rhodium', 438.6),
 	(N'Titanium', 0.21),
 	(N'Tungsten', 0.09),
-	(N'Aurum', 93.07),
-	(N'Argentum', 1.03),
-	(N'Platinum', 31.45),
-	(N'Cuprum', 0.01)
 
 insert into Item (Wear, [Type_ID])
 values
-	(28,2),
-	(16,5),
-	(14,3),
-	(32,5),
-	(21,3),
 	(0,1),
 	(20,1),
 	(1,3),
@@ -92,10 +87,16 @@ values
 	(69,5),
 	(88,4),
 	(42,3),
-	(14,4)
+	(14,4),
+	(28,2),
+	(16,5),
+	(14,3),
+	(32,5),
+	(21,3)
+	
 
 insert into Item_Contains_Material (Item_ID, Material_Name, [Weight])
-values
+values	
 	(1,N'Aurum',5),
 	(2,N'Platinum',4),
 	(3,N'Aurum',150),
@@ -156,6 +157,7 @@ select *
 from Client
 select *
 from [Contract]
+order by Item_ID
 select *
 from Item
 left join Item_Contains_Material on Item.ID = Item_Contains_Material.Item_ID
@@ -897,18 +899,41 @@ Begin
 		select top 1
 			SNILS
 		from counted_prices
-		order by Price
+		order by Price desc
 	)
 	select
 		@SNILS = SNILS
 	from top_by_price
 End
 
+create procedure GetMostPriceyStats
+as
+Begin
+	declare @snils int = 0;
+	execute GetMostPricey @snils output
+
+	select
+		Client.Fullname,
+		Item_Type.[Name],
+		[Contract].Redemption_Info
+	from Client
+	join [Contract] on [Contract].Client_SNILS = Client.SNILS
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Type on Item_Type.ID = Item.[Type_ID]
+	where Client.SNILS = @snils
+End
+
+-- вложенная
 declare @snils int = 0;
 execute GetMostPricey @snils output
 print @snils
 
+-- внешняя
+execute GetMostPriceyStats
+
 drop procedure GetMostPricey
+
+drop procedure GetMostPriceyStats
 
 -- Функции
 -- a) Скалярная функция, подсчитывающая количество товаров, которые д.б. выставлены на продажу (не выкуплены в срок)
@@ -1053,7 +1078,7 @@ End
 insert into Item (Wear, [Type_ID])
 values
 	(51,1),
-	(29,1)
+	(60,1)
 
 select * from Item
 
@@ -1223,3 +1248,120 @@ select * from [Contract]
 drop trigger CheckDelete_ClientOnlyContractsWithRedeemedState
 
 -- Лаба 5
+-- Задание 1
+-- 1-я роль - руководитель ломбарда
+-- 2-я роль - работник ломбарда
+
+-- создаём роли
+create role [Director]
+create role [Worker]
+
+-- выдаём права руководителю
+grant select on dbo.Item_Type to [Director] with grant option;
+grant insert, update, delete on dbo.Item_Type to [Director]
+
+grant select, insert on dbo.Item to [Director] with grant option;
+grant update, delete on dbo.Item to [Director]
+
+grant select on dbo.Material to [Director] with grant option;
+grant insert, update, delete on dbo.Material to [Director];
+
+grant insert on dbo.Client to [Director] with grant option;
+grant select, update, delete on dbo.Client to [Director]
+
+grant select, insert on dbo.Item_Contains_Material to [Director] with grant option;
+grant update, delete on dbo.Item_Contains_Material to [Director]
+
+grant select, insert on dbo.[Contract] to [Director] with grant option;
+grant update, delete on dbo.[Contract] to [Director]
+
+grant execute on dbo.ItemsNotRedeemedItTime to [Director]
+grant execute on dbo.GetItems to [Director] with grant option;
+grant execute on dbo.GetMoney to [Director]
+grant execute on dbo.GetMostPriceyStats to [Director]
+grant execute on dbo.CountOfItemsToSale to [Director] with grant option;
+grant execute on dbo.ClientsWithNotRedeemedState to [Director] with grant option; -- это не сработало
+grant execute on dbo.ItemsWith3OrMoreMaterials to [Director] -- это не сработало
+
+-- выдаём права работнику
+grant select on dbo.Item_Type to [Worker];
+grant select, insert on dbo.Item to [Worker];
+grant select on dbo.Material to [Worker];
+grant select, insert on dbo.Client to [Worker];
+grant select, insert on dbo.Item_Contains_Material to [Worker]; 
+grant select, insert on dbo.[Contract] to [Worker]; 
+
+grant execute on dbo.GetItems to [Worker]
+grant execute on dbo.CountOfItemsToSale to [Worker]
+grant execute on dbo.ClientsWithNotRedeemedState to [Worker] -- это не сработало
+
+--НА ПРОЦЕДУРЫ И ФУНКЦИИ
+
+-- создаём пользователей
+CREATE LOGIN user_director WITH PASSWORD = '1234567';
+CREATE USER user_director FOR LOGIN user_director;
+
+CREATE LOGIN user_worker WITH PASSWORD = '1234567';
+CREATE USER user_worker FOR LOGIN user_worker;
+
+-- добавляем пользователей в роли
+alter role [Director] add member user_director
+alter role [Worker] add member user_worker
+
+-- Задание 2
+-- Маскируем паспортные данные для Worker
+-- Метод 1
+
+ALTER TABLE dbo.Client
+ALTER COLUMN Fullname ADD MASKED WITH (FUNCTION = 'partial(2, "xxxx", 0)');
+
+GRANT UNMASK TO [Director];
+
+select * from Client
+
+-- Метод 2
+
+-- 1. Функция для маскировки
+create function MaskString (@Input nvarchar(50), @VisibleChars int, @MaskChar nvarchar(10))
+returns nvarchar(50)
+as
+begin
+    return left(@Input, @VisibleChars) + replicate(@MaskChar, len(@Input) - @VisibleChars);
+end;
+
+-- 2. Предствление с маскированными данными для сотрудника
+create view Client_MaskedView as
+select 
+    SNILS,
+    dbo.MaskString(Fullname, 2, 'x') as Fullname_Masked,
+    [Address],
+    '****' as Passport_Series_Masked,
+    '******' as Passport_ID_Masked
+from Client;
+
+-- 3. Процедура для выборки (использует представление для работника или оригинал для директора)
+create procedure GetClientData
+    @SNILS int
+as
+begin
+    -- проверяем роль
+    if is_member('Director') = 1
+    begin
+        -- директор видит оригинал
+        select * from Client where (SNILS = @SNILS);
+    end
+    else
+    begin
+        -- работник видит представление
+        select * from dbo.Client_MaskedView where (SNILS = @SNILS);
+    end
+end;
+
+-- выдаём роли
+grant select on dbo.Client_MaskedView TO [Director];
+grant execute on dbo.GetClientData TO [Director];
+grant execute on dbo.MaskString TO [Director];
+
+grant select on dbo.Client_MaskedView TO [Worker];
+grant execute on dbo.GetClientData TO [Worker];
+grant execute on dbo.MaskString TO [Worker];
