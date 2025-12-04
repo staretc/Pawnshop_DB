@@ -100,6 +100,7 @@ values
 	(2,N'Platinum',4),
 	(3,N'Aurum',150),
 	(3,N'Argentum',100),
+	(3,N'Iridium',5),
 	(4,N'Cuprum',10),
 	(5,N'Platinum',30),
 	(6,N'Aurum',8),
@@ -133,7 +134,7 @@ values
 insert into [Contract] ([Date], Date_Of_Redemption, Comission, Redemption_Info, Sale_Info, Client_SNILS, Item_ID)
 values
 	('2025-08-31','2025-09-30',200.0,N'Redeemed',N'Not on sale',101,1),
-	('2025-08-31','2025-09-30',250.5,N'Not redeemed',N'Not on sale',101,2),
+	('2025-08-31','2025-09-30',250.5,N'Not redeemed',N'Not on sale',104,2),
 	('2025-04-20','2025-05-20',100.0,N'Not redeemed',N'Sold',102,3),
 	('2025-07-31','2025-08-31',200.0,N'Not redeemed',N'On sale',103,4),
 	('2025-07-31','2025-09-30',200.0,N'Redeemed',N'Not on sale',103,5),
@@ -801,3 +802,424 @@ from Client
 left join [Contract] on [Contract].Client_SNILS = Client.SNILS
 where [Contract].Sale_Info <> N'Not on sale'
 group by Client.SNILS
+
+-- Лаба 4
+-- Процедуры
+-- a) Процедура без параметров, формирующая список товаров, которые не были выкуплены клиентами в сроки, описанные в договоре
+-- вместо getdate() берём '2025-09-01'
+
+create procedure ItemsNotRedeemedItTime
+as
+Begin
+	select
+		Item.ID,
+		Item_Type.[Name] as 'Type Name'
+	from [Contract]
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Type on Item_Type.ID = Item.[Type_ID]
+	where [Contract].Date_Of_Redemption < '2025-09-01' 
+	and [Contract].Redemption_Info = 'Not Redeemed'
+End
+
+execute ItemsNotRedeemedItTime
+
+drop procedure ItemsNotRedeemedItTime
+
+-- b) Процедура, на входе получающая ФИО клиента и формирующая список товаров, которые он когда-либо приносил закладывать в ломбард
+
+create procedure GetItems
+	@Name nvarchar(50)
+as
+Begin
+	with getId 
+	as (
+		select
+			SNILS
+		from Client
+		where Fullname = @Name
+	)
+	select
+		Item.ID,
+		Item_Type.[Name] as 'Type Name'
+	from [Contract]
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Type on Item_Type.ID = Item.[Type_ID]
+	where [Contract].Client_SNILS in (select SNILS from getId)
+End
+
+execute GetItems 'Немчанинов Руслан Владимирович'
+
+drop procedure GetItems
+
+-- c) Процедура, на входе получающая ФИО клиента, выходной параметр – общая сумма денег, которые он получил за все товары, заложенные им в ломбарде
+
+create procedure GetMoney
+	@Name nvarchar(50),
+	@TotalSum money output
+as
+Begin
+	set nocount on;
+
+	select
+		@TotalSum = isnull(round(sum(Material.Cost_Per_Gramm * Item_Contains_Material.[Weight]), 2), 0)
+	from [Contract]
+	join Client on Client.SNILS = [Contract].Client_SNILS
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+	join Material on Material.Periodic_Table_Name = Item_Contains_Material.Material_Name
+	where Fullname = @Name
+End
+
+declare @Sum money;
+exec GetMoney @Name = 'Немчанинов Руслан Владимирович', @TotalSum = @Sum output;
+select @Sum as TotalMoneyReceived;
+
+drop procedure GetMoney
+
+-- d) Процедура, вызывающая вложенную процедуру, которая находит самого «дорогого» клиента (с максимальной суммой денег, полученных им от ломбарда). Главная процедура выводит для этого клиента список товаров, которые он когда-либо приносил в залог, и сведения об их выкупе
+
+create procedure GetMostPricey
+	@SNILS int output
+as
+Begin
+	with 
+	counted_prices as (
+		select
+			[Contract].Client_SNILS as SNILS,
+			round(sum(Material.Cost_Per_Gramm * Item_Contains_Material.[Weight]),2) as Price
+		from [Contract]
+		join Item on Item.ID = [Contract].Item_ID
+		join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+		join Material on Material.Periodic_Table_Name = Item_Contains_Material.Material_Name
+		group by [Contract].Client_SNILS
+	),
+	top_by_price as (
+		select top 1
+			SNILS
+		from counted_prices
+		order by Price
+	)
+	select
+		@SNILS = SNILS
+	from top_by_price
+End
+
+declare @snils int = 0;
+execute GetMostPricey @snils output
+print @snils
+
+drop procedure GetMostPricey
+
+-- Функции
+-- a) Скалярная функция, подсчитывающая количество товаров, которые д.б. выставлены на продажу (не выкуплены в срок)
+-- вместо getdate() берём '2025-09-01'
+
+create function CountOfItemsToSale()
+returns int
+as
+Begin
+	declare @countOfItems int
+
+	select
+		@countOfItems = isnull(count(*), 0)
+	from [Contract]
+	where Date_Of_Redemption > '2025-09-01'
+	and Redemption_Info = 'Not Redeemed'
+	and Sale_Info = 'Not on sale'
+
+	return @countOfItems
+End
+
+select dbo.CountOfItemsToSale() as 'Count of Items'
+
+drop function CountOfItemsToSale
+
+-- b) Inline-функция, возвращающая список клиентов, которые не всегда выкупали свои товары
+-- вместо getdate() берём '2025-09-01'
+
+create function ClientsWithNotRedeemedState()
+returns table
+as
+return (
+	select
+		clnt.SNILS,
+		clnt.Fullname
+	from [Contract] C1
+	join Client CLNT on clnt.SNILS = C1.Client_SNILS
+	where exists ( -- Проверяем, есть ли у клиента контракты, у которых прошла дата выкупа (исключаем активные заказы)
+		select 1
+		from [Contract] C2
+		where C2.Client_SNILS = CLNT.SNILS
+		and C2.Date_Of_Redemption < '2025-09-01'
+		and C2.Redemption_Info = 'Not Redeemed'
+	)
+)
+
+select * from dbo.ClientsWithNotRedeemedState()
+
+select * from [Contract]
+
+drop function ClientsWithNotRedeemedState
+
+-- c) Multi-statement-функция, выдающая список товаров, состоящих из 3-х и более материалов, и ФИО их владельца
+
+create function ItemsWith3OrMoreMaterials()
+returns @ItemsWith3orMoreMaterials_list table (
+	ItemName nvarchar(50),
+	CountOfMaterials int,
+	ClientName nvarchar(50)
+)
+as
+Begin
+	insert into @ItemsWith3orMoreMaterials_list(ItemName, CountOfMaterials, ClientName)
+	select 
+		IT.[Name],
+		selected.CountOfMaterials,
+		CLNT.Fullname
+	from Client CLNT
+	join [Contract] C on C.Client_SNILS = CLNT.SNILS	
+	join (
+	select
+			selected_items.ID,
+			selected_items.CountOfMaterials
+		from (
+			select
+				I2.ID,
+				count(ICM.ID) as CountOfMaterials
+			from Item I2
+			join Item_Contains_Material ICM on ICM.Item_ID = I2.ID
+			group by I2.ID
+		) as selected_items
+		where CountOfMaterials >= 3
+	) selected on selected.ID = C.Item_ID
+	join Item I1 on I1.ID = selected.ID
+	join Item_Type IT on IT.ID = I1.[Type_ID]
+
+	return
+End
+
+select * from dbo.ItemsWith3OrMoreMaterials()
+
+-- Триггеры
+-- a) Триггер любого типа на добавление товара – если процент износа > 50, то товар не добавляется, выдается соотв. сообщение
+
+create trigger CheckWear_LessThen50
+on Item
+instead of insert
+as
+Begin
+	set nocount on
+
+	declare @Wear int
+	declare @Type_ID int
+	
+	-- создаём курсор
+	declare	insert_cursor cursor for
+	select Wear, [Type_ID]
+	from inserted
+
+	-- открываем курсор
+	open insert_cursor
+
+	-- получаем первую строку
+	fetch next from insert_cursor
+	into @Wear, @Type_ID
+
+	-- обрабатываем пока есть строки
+	while @@FETCH_STATUS = 0
+	begin
+		-- выполняем проверку
+		if @Wear > 50
+		begin
+			print concat('Предмет с износом ', @Wear, ' не добавлен: износ выше допустимого - 50');
+		end
+		else
+		begin
+			-- если пройдена проверка - вставляем
+			insert into Item (Wear, [Type_ID])
+			values (@Wear, @Type_ID)
+		end
+
+		-- получаем следующую строку
+		fetch next from insert_cursor
+		into @Wear, @Type_ID
+	end
+
+	-- освобождаем курсор
+	close insert_cursor
+	deallocate insert_cursor
+End
+
+insert into Item (Wear, [Type_ID])
+values
+	(51,1),
+	(29,1)
+
+select * from Item
+
+drop trigger CheckWear_LessThen50
+
+-- b)  Последующий триггер на изменение признака выкупа товара – если срок выкупа истек, то признак выкупа может поменяться только на значение «не выкуплен», если нет, то признак выкупа может поменяться только на значение «выкуплен»
+-- вместо getdate() берём '2025-09-01'
+
+create trigger CheckRedemptionInfo_OnDateOfRedemption
+on [Contract]
+after update
+as
+Begin
+	declare @Number int
+	declare @Date date
+	declare @Date_Of_Redemption date
+	declare @Comission money
+	declare @Old_Redemption_Info nvarchar(15) -- старый статус выкупа
+	declare @New_Redemption_Info nvarchar(15) -- изменённый статус выкупа
+	declare @Sale_Info nvarchar(15)
+	declare @Client_SNILS int
+	declare @Item_ID int
+
+	-- создаём курсор
+	declare update_cursor cursor for
+	select
+		i.Number,
+		i.[Date],
+		i.Date_Of_Redemption,
+		i.Comission,
+		d.Redemption_Info as Old_Redemption_Info,
+		i.Redemption_Info as New_Redemption_Info,
+		i.Sale_Info,
+		i.Client_SNILS,
+		i.Item_ID
+	from inserted i
+	join deleted d on i.Number = d.Number
+	where i.Redemption_Info <> d.Redemption_Info -- оставляем только записи, где происходят изменения
+
+	-- открываем курсор
+	open update_cursor
+
+	-- получаем первую строку
+	fetch next from update_cursor
+	into 
+		@Number,
+		@Date,
+		@Date_Of_Redemption,
+		@Comission,
+		@Old_Redemption_Info,
+		@New_Redemption_Info,
+		@Sale_Info,
+		@Client_SNILS,
+		@Item_ID
+
+	while @@FETCH_STATUS = 0
+	begin
+		-- выполняем проверку
+		if (@Date_Of_Redemption < '2025-09-01' and @New_Redemption_Info = 'Redeemed')
+		begin
+			print concat('Обновление контракта с номером ', @Number, ' невозможно - изменение статуса выкупа на "', 
+			@New_Redemption_Info, '" невозможно к установке когда прошёл срок выкупа')
+		end
+		else if (@Date_Of_Redemption >= '2025-09-01' and @New_Redemption_Info = 'Not Redeemed')
+		begin
+			print concat('Обновление контракта с номером ', @Number, ' невозможно - изменение статуса выкупа на "', 
+			@New_Redemption_Info, '" невозможно к установке пока не прошёл срок выкупа')
+		end
+		else
+		begin
+			-- если пройдена проверка - вставляем
+			update [Contract] 
+			set Redemption_Info = @New_Redemption_Info
+			where Number = @Number
+		end
+
+		-- получаем следующую строку
+		fetch next from update_cursor
+		into 
+			@Number,
+			@Date,
+			@Date_Of_Redemption,
+			@Comission,
+			@Old_Redemption_Info,
+			@New_Redemption_Info,
+			@Sale_Info,
+			@Client_SNILS,
+			@Item_ID
+	end
+
+	-- освобождаем курсор
+	close update_cursor
+	deallocate update_cursor
+End
+
+update [Contract]
+set Redemption_Info = 'Redeemed'
+where Number = 13
+
+select * from Contract
+
+drop trigger CheckRedemptionInfo_OnDateOfRedemption
+
+-- c) Замещающий триггер на операцию удаления владельца товара – если у него по всем договорам товары выкуплены, то удаляем  владельца и все его договора, если нет – ничего не удаляем, выводим сообщение 
+
+create trigger CheckDelete_ClientOnlyContractsWithRedeemedState
+on [Client]
+instead of delete
+as
+Begin
+	declare @SNILS int
+	declare @Fullname nvarchar(50)
+	declare @Address nvarchar(50)
+	declare @Passport_Series int
+	declare @Passport_ID int
+
+	-- создаём курсор
+	declare delete_cursor cursor for
+	select SNILS, Fullname, [Address], Passport_Series, Passport_ID
+	from deleted
+
+	-- открываем курсор
+	open delete_cursor
+
+	-- получаем первую строку
+	fetch next from delete_cursor
+	into @SNILS, @Fullname, @Address, @Passport_Series, @Passport_ID
+
+	while @@FETCH_STATUS = 0
+	begin
+		-- выполняем проверку
+		if (@SNILS in (
+			select distinct
+				SNILS
+			from Client CLNT
+			join [Contract] C on C.Client_SNILS = CLNT.SNILS
+			where Redemption_Info = 'Not Redeemed'
+		))
+		begin
+			print concat('Удаление клиента со СНИЛСом ', @SNILS, ' невозможно - у клиента имеются незавершённые контракты')
+		end
+		else
+		begin
+			-- если пройдена проверка - вставляем
+			delete from [Contract]
+			where Client_SNILS = @SNILS
+
+			delete from Client
+			where SNILS = @SNILS
+		end
+
+		-- получаем следующую строку
+		fetch next from delete_cursor
+		into @SNILS, @Fullname, @Address, @Passport_Series, @Passport_ID
+	end
+
+	-- освобождаем курсор
+	close delete_cursor
+	deallocate delete_cursor
+End
+
+delete from [Client]
+where SNILS = 104
+
+select * from [Contract]
+
+drop trigger CheckDelete_ClientOnlyContractsWithRedeemedState
+
+-- Лаба 5
