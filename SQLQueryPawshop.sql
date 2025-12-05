@@ -1280,8 +1280,8 @@ grant execute on dbo.GetItems to [Director] with grant option;
 grant execute on dbo.GetMoney to [Director]
 grant execute on dbo.GetMostPriceyStats to [Director]
 grant execute on dbo.CountOfItemsToSale to [Director] with grant option;
-grant execute on dbo.ClientsWithNotRedeemedState to [Director] with grant option; -- это не сработало
-grant execute on dbo.ItemsWith3OrMoreMaterials to [Director] -- это не сработало
+grant select on dbo.ClientsWithNotRedeemedState to [Director] with grant option;
+grant select on dbo.ItemsWith3OrMoreMaterials to [Director]
 
 -- выдаём права работнику
 grant select on dbo.Item_Type to [Worker];
@@ -1293,9 +1293,7 @@ grant select, insert on dbo.[Contract] to [Worker];
 
 grant execute on dbo.GetItems to [Worker]
 grant execute on dbo.CountOfItemsToSale to [Worker]
-grant execute on dbo.ClientsWithNotRedeemedState to [Worker] -- это не сработало
-
---НА ПРОЦЕДУРЫ И ФУНКЦИИ
+grant select on dbo.ClientsWithNotRedeemedState to [Worker]
 
 -- создаём пользователей
 CREATE LOGIN user_director WITH PASSWORD = '1234567';
