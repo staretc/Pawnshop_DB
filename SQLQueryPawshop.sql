@@ -1258,42 +1258,58 @@ create role [Worker]
 
 -- выдаём права руководителю
 grant select on dbo.Item_Type to [Director] with grant option;
-grant insert, update, delete on dbo.Item_Type to [Director]
+grant insert, update, delete on dbo.Item_Type to [Director];
 
 grant select, insert on dbo.Item to [Director] with grant option;
-grant update, delete on dbo.Item to [Director]
+grant update, delete on dbo.Item to [Director];
 
 grant select on dbo.Material to [Director] with grant option;
 grant insert, update, delete on dbo.Material to [Director];
 
 grant insert on dbo.Client to [Director] with grant option;
-grant select, update, delete on dbo.Client to [Director]
+grant select, update, delete on dbo.Client to [Director];
 
 grant select, insert on dbo.Item_Contains_Material to [Director] with grant option;
-grant update, delete on dbo.Item_Contains_Material to [Director]
+grant update, delete on dbo.Item_Contains_Material to [Director];
 
 grant select, insert on dbo.[Contract] to [Director] with grant option;
-grant update, delete on dbo.[Contract] to [Director]
+grant update, delete on dbo.[Contract] to [Director];
 
-grant execute on dbo.ItemsNotRedeemedItTime to [Director]
+grant execute on dbo.ItemsNotRedeemedItTime to [Director];
 grant execute on dbo.GetItems to [Director] with grant option;
-grant execute on dbo.GetMoney to [Director]
-grant execute on dbo.GetMostPriceyStats to [Director]
+grant execute on dbo.GetMoney to [Director];
+grant execute on dbo.GetMostPriceyStats to [Director];
 grant execute on dbo.CountOfItemsToSale to [Director] with grant option;
 grant select on dbo.ClientsWithNotRedeemedState to [Director] with grant option;
-grant select on dbo.ItemsWith3OrMoreMaterials to [Director]
+grant select on dbo.ItemsWith3OrMoreMaterials to [Director];
 
 -- выдаём права работнику
 grant select on dbo.Item_Type to [Worker];
-grant select, insert on dbo.Item to [Worker];
-grant select on dbo.Material to [Worker];
-grant select, insert on dbo.Client to [Worker];
-grant select, insert on dbo.Item_Contains_Material to [Worker]; 
-grant select, insert on dbo.[Contract] to [Worker]; 
+deny insert, update, delete on dbo.Item_Type to [Worker];
 
-grant execute on dbo.GetItems to [Worker]
-grant execute on dbo.CountOfItemsToSale to [Worker]
-grant select on dbo.ClientsWithNotRedeemedState to [Worker]
+grant select, insert on dbo.Item to [Worker];
+deny update, delete on dbo.Item to [Worker];
+
+grant select on dbo.Material to [Worker];
+deny insert, update, delete on dbo.Material to [Worker];
+
+grant insert on dbo.Client to [Worker];
+deny select, update, delete on dbo.Client to [Worker];
+
+grant select, insert on dbo.Item_Contains_Material to [Worker]; 
+deny update, delete on dbo.Item_Contains_Material to [Worker];
+
+grant select, insert on dbo.[Contract] to [Worker]; 
+deny update, delete on dbo.[Contract] to [Worker];
+
+grant execute on dbo.GetItems to [Worker];
+grant execute on dbo.CountOfItemsToSale to [Worker];
+grant select on dbo.ClientsWithNotRedeemedState to [Worker];
+
+deny execute on dbo.ItemsNotRedeemedItTime to [Director];
+deny execute on dbo.GetMoney to [Director];
+deny execute on dbo.GetMostPriceyStats to [Director];
+deny select on dbo.ItemsWith3OrMoreMaterials to [Director];
 
 -- создаём пользователей
 CREATE LOGIN user_director WITH PASSWORD = '1234567';
@@ -1356,10 +1372,12 @@ begin
 end;
 
 -- выдаём роли
-grant select on dbo.Client_MaskedView TO [Director];
-grant execute on dbo.GetClientData TO [Director];
-grant execute on dbo.MaskString TO [Director];
+grant select on dbo.Client_MaskedView to [Director];
+grant execute on dbo.GetClientData to [Director];
+grant execute on dbo.MaskString to [Director];
 
-grant select on dbo.Client_MaskedView TO [Worker];
-grant execute on dbo.GetClientData TO [Worker];
-grant execute on dbo.MaskString TO [Worker];
+grant select on dbo.Client_MaskedView to [Worker];
+grant execute on dbo.GetClientData to [Worker];
+grant execute on dbo.MaskString to [Worker];
+
+select * from Client
