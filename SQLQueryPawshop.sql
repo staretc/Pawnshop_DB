@@ -810,13 +810,15 @@ group by Client.SNILS
 -- a) Процедура без параметров, формирующая список товаров, которые не были выкуплены клиентами в сроки, описанные в договоре
 -- вместо getdate() берём '2025-09-01'
 
-create procedure ItemsNotRedeemedItTime
+create or alter procedure ItemsNotRedeemedItTime
 as
 Begin
 	select
+		Client.Fullname,
 		Item.ID,
 		Item_Type.[Name] as 'Type Name'
-	from [Contract]
+	from Client
+	join [Contract] on [Contract].Client_SNILS = Client.SNILS
 	join Item on Item.ID = [Contract].Item_ID
 	join Item_Type on Item_Type.ID = Item.[Type_ID]
 	where [Contract].Date_Of_Redemption < '2025-09-01' 
@@ -829,7 +831,7 @@ drop procedure ItemsNotRedeemedItTime
 
 -- b) Процедура, на входе получающая ФИО клиента и формирующая список товаров, которые он когда-либо приносил закладывать в ломбард
 
-create procedure GetItems
+create or alter procedure GetItems
 	@Name nvarchar(50)
 as
 Begin
@@ -842,7 +844,10 @@ Begin
 	)
 	select
 		Item.ID,
-		Item_Type.[Name] as 'Type Name'
+		Item_Type.[Name] as 'Type Name',
+		[Contract].[Date],
+		[Contract].Redemption_Info,
+		[Contract].Sale_Info
 	from [Contract]
 	join Item on Item.ID = [Contract].Item_ID
 	join Item_Type on Item_Type.ID = Item.[Type_ID]
@@ -876,35 +881,47 @@ declare @Sum money;
 exec GetMoney @Name = 'Немчанинов Руслан Владимирович', @TotalSum = @Sum output;
 select @Sum as TotalMoneyReceived;
 
+-- проверка
+select
+	Material.Periodic_Table_Name,
+	Material.Cost_Per_Gramm,
+	Item_Contains_Material.[Weight]
+from [Contract]
+	join Client on Client.SNILS = [Contract].Client_SNILS
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+	join Material on Material.Periodic_Table_Name = Item_Contains_Material.Material_Name
+where Client.Fullname = 'Немчанинов Руслан Владимирович'
+
 drop procedure GetMoney
 
 -- d) Процедура, вызывающая вложенную процедуру, которая находит самого «дорогого» клиента (с максимальной суммой денег, полученных им от ломбарда). Главная процедура выводит для этого клиента список товаров, которые он когда-либо приносил в залог, и сведения об их выкупе
 
-create procedure GetMostPricey
+create or alter procedure GetMostPricey
 	@SNILS int output
 as
 Begin
-	with 
-	counted_prices as (
-		select
-			[Contract].Client_SNILS as SNILS,
-			round(sum(Material.Cost_Per_Gramm * Item_Contains_Material.[Weight]),2) as Price
-		from [Contract]
-		join Item on Item.ID = [Contract].Item_ID
-		join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
-		join Material on Material.Periodic_Table_Name = Item_Contains_Material.Material_Name
-		group by [Contract].Client_SNILS
-	),
-	top_by_price as (
-		select top 1
-			SNILS
-		from counted_prices
-		order by Price desc
-	)
-	select
-		@SNILS = SNILS
-	from top_by_price
+	--with 
+	--counted_prices as (
+	select top 1 
+		@SNILS = [Contract].Client_SNILS
+	from [Contract]
+	join Item on Item.ID = [Contract].Item_ID
+	join Item_Contains_Material on Item_Contains_Material.Item_ID = Item.ID
+	join Material on Material.Periodic_Table_Name = Item_Contains_Material.Material_Name
+	group by [Contract].Client_SNILS
+	order by round(sum(Material.Cost_Per_Gramm * Item_Contains_Material.[Weight]),2) desc
 End
+	--),
+	--top_by_price as (
+	--	select top 1
+	--		SNILS
+	--	from counted_prices
+	--	order by Price desc
+	--)
+	--select
+	--	@SNILS = SNILS
+	--from top_by_price
 
 create procedure GetMostPriceyStats
 as
@@ -939,7 +956,7 @@ drop procedure GetMostPriceyStats
 -- a) Скалярная функция, подсчитывающая количество товаров, которые д.б. выставлены на продажу (не выкуплены в срок)
 -- вместо getdate() берём '2025-09-01'
 
-create function CountOfItemsToSale()
+create or alter function CountOfItemsToSale()
 returns int
 as
 Begin
@@ -948,7 +965,7 @@ Begin
 	select
 		@countOfItems = isnull(count(*), 0)
 	from [Contract]
-	where Date_Of_Redemption > '2025-09-01'
+	where Date_Of_Redemption < '2025-09-01'
 	and Redemption_Info = 'Not Redeemed'
 	and Sale_Info = 'Not on sale'
 
@@ -961,22 +978,22 @@ drop function CountOfItemsToSale
 
 -- b) Inline-функция, возвращающая список клиентов, которые не всегда выкупали свои товары
 -- вместо getdate() берём '2025-09-01'
+-- FIXED --
 
-create function ClientsWithNotRedeemedState()
+create or alter function ClientsWithNotRedeemedState()
 returns table
 as
 return (
-	select
-		clnt.SNILS,
-		clnt.Fullname
-	from [Contract] C1
-	join Client CLNT on clnt.SNILS = C1.Client_SNILS
+	select distinct
+		CLNT.SNILS,
+		CLNT.Fullname
+	from Client CLNT
 	where exists ( -- Проверяем, есть ли у клиента контракты, у которых прошла дата выкупа (исключаем активные заказы)
-		select 1
-		from [Contract] C2
-		where C2.Client_SNILS = CLNT.SNILS
-		and C2.Date_Of_Redemption < '2025-09-01'
-		and C2.Redemption_Info = 'Not Redeemed'
+		select 1 
+		from [Contract] C
+		where C.Client_SNILS = CLNT.SNILS
+		and C.Date_Of_Redemption < '2025-09-01'
+		and C.Redemption_Info = 'Not Redeemed'
 	)
 )
 
@@ -987,39 +1004,36 @@ select * from [Contract]
 drop function ClientsWithNotRedeemedState
 
 -- c) Multi-statement-функция, выдающая список товаров, состоящих из 3-х и более материалов, и ФИО их владельца
+-- FIXED --
 
-create function ItemsWith3OrMoreMaterials()
+create or alter function ItemsWith3OrMoreMaterials()
 returns @ItemsWith3orMoreMaterials_list table (
 	ItemName nvarchar(50),
 	CountOfMaterials int,
 	ClientName nvarchar(50)
 )
 as
-Begin
+Begin 
+	with 
+	correct_items as (
+		select
+			I.ID,
+			count(ICM.ID) as CountOfMaterials
+		from Item I
+		join Item_Contains_Material ICM on ICM.Item_ID = I.ID
+		group by I.ID
+		having count(ICM.ID) >= 3
+	)
 	insert into @ItemsWith3orMoreMaterials_list(ItemName, CountOfMaterials, ClientName)
 	select 
-		IT.[Name],
-		selected.CountOfMaterials,
-		CLNT.Fullname
-	from Client CLNT
-	join [Contract] C on C.Client_SNILS = CLNT.SNILS	
-	join (
-	select
-			selected_items.ID,
-			selected_items.CountOfMaterials
-		from (
-			select
-				I2.ID,
-				count(ICM.ID) as CountOfMaterials
-			from Item I2
-			join Item_Contains_Material ICM on ICM.Item_ID = I2.ID
-			group by I2.ID
-		) as selected_items
-		where CountOfMaterials >= 3
-	) selected on selected.ID = C.Item_ID
-	join Item I1 on I1.ID = selected.ID
-	join Item_Type IT on IT.ID = I1.[Type_ID]
-
+		Item_Type.[Name],
+		correct_items.CountOfMaterials,
+		Client.Fullname
+	from Client
+	join [Contract] on [Contract].Client_SNILS = Client.SNILS
+	join correct_items on correct_items.ID = [Contract].Item_ID
+	join Item on Item.ID = correct_items.ID
+	join Item_Type on Item_Type.ID = Item.[Type_ID]
 	return
 End
 
@@ -1028,7 +1042,7 @@ select * from dbo.ItemsWith3OrMoreMaterials()
 -- Триггеры
 -- a) Триггер любого типа на добавление товара – если процент износа > 50, то товар не добавляется, выдается соотв. сообщение
 
-create trigger CheckWear_LessThen50
+create or alter trigger CheckWear_LessThen50
 on Item
 instead of insert
 as
@@ -1063,6 +1077,8 @@ Begin
 			-- если пройдена проверка - вставляем
 			insert into Item (Wear, [Type_ID])
 			values (@Wear, @Type_ID)
+
+			print concat('Предмет с износом ', @Wear, ' добавлен успешно!');
 		end
 
 		-- получаем следующую строку
@@ -1077,7 +1093,7 @@ End
 
 insert into Item (Wear, [Type_ID])
 values
-	(51,1),
+	(12,1),
 	(60,1)
 
 select * from Item
@@ -1086,8 +1102,9 @@ drop trigger CheckWear_LessThen50
 
 -- b)  Последующий триггер на изменение признака выкупа товара – если срок выкупа истек, то признак выкупа может поменяться только на значение «не выкуплен», если нет, то признак выкупа может поменяться только на значение «выкуплен»
 -- вместо getdate() берём '2025-09-01'
+-- FIXED --
 
-create trigger CheckRedemptionInfo_OnDateOfRedemption
+create or alter trigger CheckRedemptionInfo_OnDateOfRedemption
 on [Contract]
 after update
 as
@@ -1140,18 +1157,21 @@ Begin
 		if (@Date_Of_Redemption < '2025-09-01' and @New_Redemption_Info = 'Redeemed')
 		begin
 			print concat('Обновление контракта с номером ', @Number, ' невозможно - изменение статуса выкупа на "', 
-			@New_Redemption_Info, '" невозможно к установке когда прошёл срок выкупа')
+			@New_Redemption_Info, '" невозможно к установке когда прошёл срок выкупа. ',
+			'Будут оставлены старые данные.')
+
+			update [Contract]
+			set Redemption_Info = @Old_Redemption_Info
+			where Number = @Number
 		end
 		else if (@Date_Of_Redemption >= '2025-09-01' and @New_Redemption_Info = 'Not Redeemed')
 		begin
 			print concat('Обновление контракта с номером ', @Number, ' невозможно - изменение статуса выкупа на "', 
-			@New_Redemption_Info, '" невозможно к установке пока не прошёл срок выкупа')
-		end
-		else
-		begin
-			-- если пройдена проверка - вставляем
-			update [Contract] 
-			set Redemption_Info = @New_Redemption_Info
+			@New_Redemption_Info, '" невозможно к установке пока не прошёл срок выкупа ',
+			'Будут оставлены старые данные.')
+
+			update [Contract]
+			set Redemption_Info = @Old_Redemption_Info
 			where Number = @Number
 		end
 
@@ -1172,19 +1192,24 @@ Begin
 	-- освобождаем курсор
 	close update_cursor
 	deallocate update_cursor
+
+	print ('Обновление записей прошло успешно!')
 End
 
+begin tran
+select * from Contract
 update [Contract]
-set Redemption_Info = 'Redeemed'
-where Number = 13
+set Redemption_Info = 'Not redeemed'
 
 select * from Contract
+rollback
 
 drop trigger CheckRedemptionInfo_OnDateOfRedemption
 
--- c) Замещающий триггер на операцию удаления владельца товара – если у него по всем договорам товары выкуплены, то удаляем  владельца и все его договора, если нет – ничего не удаляем, выводим сообщение 
+-- c) Замещающий триггер на операцию удаления владельца товара – если у него по всем договорам товары выкуплены, то удаляем владельца и все его договора, если нет – ничего не удаляем, выводим сообщение 
+-- FIXED --
 
-create trigger CheckDelete_ClientOnlyContractsWithRedeemedState
+create or alter trigger CheckDelete_ClientOnlyContractsWithRedeemedState
 on [Client]
 instead of delete
 as
@@ -1194,6 +1219,7 @@ Begin
 	declare @Address nvarchar(50)
 	declare @Passport_Series int
 	declare @Passport_ID int
+	declare @deleting_items table (id int)
 
 	-- создаём курсор
 	declare delete_cursor cursor for
@@ -1222,12 +1248,34 @@ Begin
 		end
 		else
 		begin
-			-- если пройдена проверка - вставляем
+			-- если пройдена проверка - можно удалять
+			-- сначала запоминаем id товаров, которые удаляем
+			-- тк они внешние ключи в контрактах
+
+			insert into @deleting_items(id)
+			select
+				Item_ID
+			from [Contract]
+			where Client_SNILS = @SNILS
+
+			-- удаляем:
+			-- контракты
 			delete from [Contract]
 			where Client_SNILS = @SNILS
 
+			-- связки товар-материал
+			delete from Item_Contains_Material
+			where Item_ID in (select id from @deleting_items)
+
+			-- товары
+			delete from [Item]
+			where ID in (select id from @deleting_items)
+
+			-- клиентов
 			delete from Client
 			where SNILS = @SNILS
+
+			print concat('Удалён клиент со СНИЛСом ', @SNILS)
 		end
 
 		-- получаем следующую строку
@@ -1240,10 +1288,12 @@ Begin
 	deallocate delete_cursor
 End
 
+begin tran
+select * from [Client]
 delete from [Client]
-where SNILS = 104
-
-select * from [Contract]
+where SNILS = 101
+select * from [Client]
+rollback
 
 drop trigger CheckDelete_ClientOnlyContractsWithRedeemedState
 
@@ -1275,7 +1325,7 @@ grant update, delete on dbo.Item_Contains_Material to [Director];
 grant select, insert on dbo.[Contract] to [Director] with grant option;
 grant update, delete on dbo.[Contract] to [Director];
 
-grant execute on dbo.ItemsNotRedeemedItTime to [Director];
+grant execute on dbo.ItemsNotRedeemedItTime to [Director] with grant option;
 grant execute on dbo.GetItems to [Director] with grant option;
 grant execute on dbo.GetMoney to [Director];
 grant execute on dbo.GetMostPriceyStats to [Director];
@@ -1306,30 +1356,164 @@ grant execute on dbo.GetItems to [Worker];
 grant execute on dbo.CountOfItemsToSale to [Worker];
 grant select on dbo.ClientsWithNotRedeemedState to [Worker];
 
-deny execute on dbo.ItemsNotRedeemedItTime to [Director];
-deny execute on dbo.GetMoney to [Director];
-deny execute on dbo.GetMostPriceyStats to [Director];
-deny select on dbo.ItemsWith3OrMoreMaterials to [Director];
+revoke execute on dbo.ItemsNotRedeemedItTime to [Worker];
+deny execute on dbo.GetMoney to [Worker];
+deny execute on dbo.GetMostPricey to [Worker];
+deny execute on dbo.GetMostPriceyStats to [Worker];
+deny select on dbo.ItemsWith3OrMoreMaterials to [Worker];
 
+revoke grant option for execute on dbo.ItemsNotRedeemedItTime to [Director] cascade
+grant execute on dbo.ItemsNotRedeemedItTime to [Worker] as [Director];
 -- создаём пользователей
-CREATE LOGIN user_director WITH PASSWORD = '1234567';
-CREATE USER user_director FOR LOGIN user_director;
+create login user_director with password = '1234567';
+create user user_director for login user_director;
 
-CREATE LOGIN user_worker WITH PASSWORD = '1234567';
-CREATE USER user_worker FOR LOGIN user_worker;
+create login user_worker with password = '1234567';
+create user user_worker for login user_worker;
 
 -- добавляем пользователей в роли
 alter role [Director] add member user_director
 alter role [Worker] add member user_worker
 
+-- проверка прав
+use [Pawnshop_DB]
+select user_name()
+
+select *
+from Item_Contains_Material
+select *
+from Material
+select *
+from Client
+select *
+from [Contract]
+select *
+from Item
+select *
+from Item_Type
+
+exec ItemsNotRedeemedItTime
+exec GetItems
+exec GetMoney
+exec GetMostPriceyStats
+exec GetClientData
+exec CountOfItemsToSale
+select * from ClientsWithNotRedeemedState
+select * from ItemsWith3OrMoreMaterials
+
+-- insert
+begin tran
+insert into Item_Type (Name)
+values
+	(N'Цепь')
+rollback
+
+begin tran
+insert into Material
+values
+	(N'Argentum', 1.03)
+rollback
+
+begin tran
+insert into Item (Wear, [Type_ID])
+values
+	(0,1)
+rollback
+	
+begin tran
+insert into Item_Contains_Material (Item_ID, Material_Name, [Weight])
+values	
+	(1,N'Aurum',5)
+rollback
+
+begin tran
+insert into Client
+values
+	(101,N'Волкова Анастасия Дмитриевна',N'Бабича, 11к5',1001,100001)
+rollback
+
+begin tran
+insert into [Contract] ([Date], Date_Of_Redemption, Comission, Redemption_Info, Sale_Info, Client_SNILS, Item_ID)
+values
+	('2025-08-31','2025-09-30',200.0,N'Redeemed',N'Not on sale',101,1)
+rollback
+
+--update
+begin tran
+update Item_Type
+set [Name] = 'qwerty'
+where ID = 1
+rollback
+
+begin tran
+update Item
+set Wear = 0
+where ID = 1
+rollback
+
+begin tran
+update Material
+set Periodic_Table_Name = 'AAAAAAA'
+where Periodic_Table_Name = 'Aurum'
+rollback
+
+begin tran
+update Item_Contains_Material
+set Weight = 0
+where ID = 1
+rollback
+
+begin tran
+update Client
+set Fullname = 'AAAAAAAAAa'
+where SNILS = 101
+rollback
+
+begin tran
+update [Contract]
+set Comission = 100000000
+where Number = 15
+rollback
+
+--delete
+begin tran
+delete Item_Type
+where ID = 1
+rollback
+
+begin tran
+delete Item
+where ID = 1
+rollback
+
+begin tran
+delete Material
+where Periodic_Table_Name = 'Aurum'
+rollback
+
+begin tran
+delete Item_Contains_Material
+where ID = 1
+rollback
+
+begin tran
+delete Client
+where SNILS = 101
+rollback
+
+begin tran
+delete [Contract]
+where Number = 15
+rollback
+
 -- Задание 2
 -- Маскируем паспортные данные для Worker
 -- Метод 1
 
-ALTER TABLE dbo.Client
-ALTER COLUMN Fullname ADD MASKED WITH (FUNCTION = 'partial(2, "xxxx", 0)');
+alter table dbo.Client
+alter column Fullname add masked with (function = 'partial(2, "xxxx", 0)');
 
-GRANT UNMASK TO [Director];
+grant UNMASK to [Director];
 
 select * from Client
 
@@ -1381,3 +1565,9 @@ grant execute on dbo.GetClientData to [Worker];
 grant execute on dbo.MaskString to [Worker];
 
 select * from Client
+
+declare @SNILS int = 101
+exec GetClientData @SNILS
+
+use [Pawnshop_DB]
+select user_name()
