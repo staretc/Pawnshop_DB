@@ -68,14 +68,14 @@ insert into Material
 values
 	(N'Argentum', 1.03),
 	(N'Aurum', 93.07),
-	(N'Cuprum', 0.01)
+	(N'Cuprum', 0.01),
 	(N'Ferrum', 0.8),
 	(N'Iridium', 187.23),
 	(N'Palladium', 42.68),
 	(N'Platinum', 31.45),
 	(N'Rhodium', 438.6),
 	(N'Titanium', 0.21),
-	(N'Tungsten', 0.09),
+	(N'Tungsten', 0.09)
 
 insert into Item (Wear, [Type_ID])
 values
@@ -93,7 +93,6 @@ values
 	(14,3),
 	(32,5),
 	(21,3)
-	
 
 insert into Item_Contains_Material (Item_ID, Material_Name, [Weight])
 values	
@@ -734,6 +733,7 @@ where [Contract].Redemption_Info = N'Not redeemed' and [Contract].Sale_Info <> N
 group by [Contract].[Date], Item_Type.[Name]
 
 -- (c) Найти выручку ломбарда от комиссионных с начала текущего года для каждого вида товара
+-- вместо year(getdate()) берём '2025'
 
 select
 	Item_Type.[Name],
@@ -745,7 +745,7 @@ from (
 	from [Contract]
 	join Item on Item.ID = [Contract].Item_ID
 	join Item_Type on Item_Type.ID = Item.[Type_ID]
-	where year([Contract].[Date]) = year(getdate())
+	where year([Contract].[Date]) = '2025'
 	group by Item_Type.[Name]
 	) counted_comission
 right join Item_Type on counted_comission.[Type] = Item_Type.[Name]
