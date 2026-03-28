@@ -53,7 +53,7 @@ ADD CONSTRAINT check_info_conflict CHECK (
 	(Redemption_Info = N'Redeemed' and Sale_Info != N'On sale') or 
 	(Redemption_Info = N'Redeemed' and Sale_Info != N'Sold') or 
 	(Redemption_Info = N'Not redeemed')
-);
+)
 
 insert into Item_Type (Name)
 values
