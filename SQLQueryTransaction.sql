@@ -9,6 +9,7 @@ SET IDENTITY_INSERT Item_Type ON;
 INSERT INTO Item_Type (ID, Name) VALUES (999, N'Тестовый тип для транзакции');
 SET IDENTITY_INSERT Item_Type OFF;
 
+-- ТРАНЗАКЦИЯ
 -- Проверка начального состояния
 SELECT 'ДО ТРАНЗАКЦИИ' as Этап, COUNT(*) as Количество_предметов 
 FROM Item WHERE Type_ID = 999;
@@ -53,10 +54,7 @@ BEGIN TRANSACTION FinalTransaction;
     -- ФИКСАЦИЯ
     COMMIT TRANSACTION FinalTransaction;
 
--- ============================================
--- ФИНАЛЬНАЯ ПРОВЕРКА
--- ============================================
-SELECT 'ФИНАЛ: ДАННЫЕ ЗАФИКСИРОВАНЫ' as Этап, 
+SELECT 'ДАННЫЕ ЗАФИКСИРОВАНЫ' as Этап, 
        ID, Wear, Type_ID
 FROM Item 
 WHERE Type_ID = 999
@@ -67,7 +65,3 @@ DELETE FROM Item WHERE Type_ID = 999
 
 -- Удаление тестового типа предмета
 DELETE FROM Item_Type WHERE ID = 999
-
---===========
--- ЗАДАНИЕ 2
---===========
