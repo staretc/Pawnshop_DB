@@ -67,11 +67,9 @@ PRINT 'USER1: ROLLBACK';
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
 BEGIN TRANSACTION;
 UPDATE Item_Type SET Name = N'SOME DATA' WHERE ID = 888;
-PRINT 'USER1: Изменено на SOME DATA (не зафиксировано)';
 
 -- Шаг 3: Откатываем
 ROLLBACK;
-PRINT 'USER1: ROLLBACK';
 
 -- НЕПОВТОРЯЮЩЕЕСЯ ЧТЕНИЕ --
 
@@ -106,10 +104,10 @@ COMMIT;
 -- Шаг 1: Первый запрос
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 BEGIN TRANSACTION;
-SELECT 'USER1 Первый запрос' as Этап, COUNT(*) as Количество, ID, Name 
-FROM Item_Type WHERE ID > 500 AND ID < 900 GROUP BY ID, Name;
+SELECT 'USER1 Первый запрос' as Этап, COUNT(*) as Количество, Name 
+FROM Item_Type WHERE ID > 500 AND ID < 900 GROUP BY Name;
 
--- Шаг 3: Второй запрос!
+-- Шаг 3: Второй запрос
 SELECT 'USER1 Второй запрос' as Этап, COUNT(*) as Количество, Name 
 FROM Item_Type WHERE ID > 500 AND ID < 900 GROUP BY Name;
 
@@ -124,10 +122,10 @@ COMMIT;
 -- Шаг 1: Первый запрос
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 BEGIN TRANSACTION;
-SELECT 'USER1 Первый запрос' as Этап, COUNT(*) as Количество, ID, Name 
-FROM Item_Type WHERE ID > 500 AND ID < 900 GROUP BY ID, Name;
+SELECT 'USER1 Первый запрос' as Этап, COUNT(*) as Количество, Name 
+FROM Item_Type WHERE ID > 500 AND ID < 900 GROUP BY Name;
 
--- Шаг 3: Второй запрос!
+-- Шаг 3: Второй запрос
 SELECT 'USER1 Второй запрос' as Этап, COUNT(*) as Количество, Name 
 FROM Item_Type WHERE ID > 500 AND ID < 900 GROUP BY Name;
 

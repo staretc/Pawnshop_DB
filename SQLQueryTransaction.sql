@@ -6,7 +6,7 @@ use [Pawnshop_DB]
 
 -- Вставка тестового типа предмета
 SET IDENTITY_INSERT Item_Type ON;
-INSERT INTO Item_Type (ID, Name) VALUES (999, N'Тестовый тип для транзакции');
+INSERT INTO Item_Type (ID, Name) VALUES (999, N'TEST');
 SET IDENTITY_INSERT Item_Type OFF;
 
 -- ТРАНЗАКЦИЯ
