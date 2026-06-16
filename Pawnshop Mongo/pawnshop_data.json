@@ -1,0 +1,466 @@
+[
+  {
+    "contract_number": 10,
+    "date": "2025-08-31T00:00:00",
+    "redemption_date": "2025-09-30T00:00:00",
+    "comission": 200.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 101,
+      "fullname": "Волкова Анастасия Дмитриевна",
+      "address": "Бабича, 11к5",
+      "passport": {
+        "series": 1001,
+        "id": 100001
+      }
+    },
+    "item": {
+      "item_id": 1,
+      "type": "Кольцо",
+      "wear_percent": 0,
+      "materials": [
+        {
+          "name": "Aurum",
+          "weight": 5.0,
+          "cost_per_gramm": 93.07
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 12,
+    "date": "2025-04-20T00:00:00",
+    "redemption_date": "2025-05-20T00:00:00",
+    "comission": 100.0,
+    "status": {
+      "redemption": "Not redeemed",
+      "sale": "Sold"
+    },
+    "client": {
+      "snils": 102,
+      "fullname": "Телушкин Роман Александрович",
+      "address": "Ньютона, 28",
+      "passport": {
+        "series": 1001,
+        "id": 100002
+      }
+    },
+    "item": {
+      "item_id": 3,
+      "type": "Часы",
+      "wear_percent": 1,
+      "materials": [
+        {
+          "name": "Aurum",
+          "weight": 150.0,
+          "cost_per_gramm": 93.07
+        },
+        {
+          "name": "Argentum",
+          "weight": 100.0,
+          "cost_per_gramm": 1.03
+        },
+        {
+          "name": "Iridium",
+          "weight": 5.0,
+          "cost_per_gramm": 187.23
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 13,
+    "date": "2025-07-31T00:00:00",
+    "redemption_date": "2025-08-31T00:00:00",
+    "comission": 200.0,
+    "status": {
+      "redemption": "Not Redeemed",
+      "sale": "On sale"
+    },
+    "client": {
+      "snils": 103,
+      "fullname": "Опарин Егор Александрович",
+      "address": "Слепнёва, 20",
+      "passport": {
+        "series": 1001,
+        "id": 100003
+      }
+    },
+    "item": {
+      "item_id": 4,
+      "type": "Монета",
+      "wear_percent": 6,
+      "materials": [
+        {
+          "name": "Cuprum",
+          "weight": 10.0,
+          "cost_per_gramm": 0.01
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 14,
+    "date": "2025-07-31T00:00:00",
+    "redemption_date": "2025-09-30T00:00:00",
+    "comission": 200.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 103,
+      "fullname": "Опарин Егор Александрович",
+      "address": "Слепнёва, 20",
+      "passport": {
+        "series": 1001,
+        "id": 100003
+      }
+    },
+    "item": {
+      "item_id": 5,
+      "type": "Цепочка",
+      "wear_percent": 9,
+      "materials": [
+        {
+          "name": "Platinum",
+          "weight": 30.0,
+          "cost_per_gramm": 31.45
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 17,
+    "date": "2025-03-12T00:00:00",
+    "redemption_date": "2025-07-14T00:00:00",
+    "comission": 280.0,
+    "status": {
+      "redemption": "Not redeemed",
+      "sale": "On sale"
+    },
+    "client": {
+      "snils": 105,
+      "fullname": "Телушкин Иван Александрович",
+      "address": "Ньютона, 28",
+      "passport": {
+        "series": 1001,
+        "id": 100005
+      }
+    },
+    "item": {
+      "item_id": 8,
+      "type": "Часы",
+      "wear_percent": 42,
+      "materials": [
+        {
+          "name": "Platinum",
+          "weight": 200.0,
+          "cost_per_gramm": 31.45
+        },
+        {
+          "name": "Aurum",
+          "weight": 50.0,
+          "cost_per_gramm": 93.07
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 19,
+    "date": "2025-06-30T00:00:00",
+    "redemption_date": "2025-07-30T00:00:00",
+    "comission": 150.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 106,
+      "fullname": "Григорьев Валерий Алексеевич",
+      "address": "Ярославская, 150",
+      "passport": {
+        "series": 1001,
+        "id": 100006
+      }
+    },
+    "item": {
+      "item_id": 9,
+      "type": "Слиток",
+      "wear_percent": 14,
+      "materials": [
+        {
+          "name": "Cuprum",
+          "weight": 500.0,
+          "cost_per_gramm": 0.01
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 20,
+    "date": "2024-12-29T00:00:00",
+    "redemption_date": "2025-01-29T00:00:00",
+    "comission": 140.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 107,
+      "fullname": "Руднева Татьяна Алексеевна",
+      "address": "Слепнёва, 16",
+      "passport": {
+        "series": 1001,
+        "id": 100007
+      }
+    },
+    "item": {
+      "item_id": 10,
+      "type": "Цепочка",
+      "wear_percent": 28,
+      "materials": [
+        {
+          "name": "Iridium",
+          "weight": 50.0,
+          "cost_per_gramm": 187.23
+        },
+        {
+          "name": "Ferrum",
+          "weight": 55.0,
+          "cost_per_gramm": 0.8
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 21,
+    "date": "2025-02-28T00:00:00",
+    "redemption_date": "2025-03-28T00:00:00",
+    "comission": 190.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 108,
+      "fullname": "Немчанинов Владимир Витальевич",
+      "address": "Родниковая, 11",
+      "passport": {
+        "series": 1001,
+        "id": 100008
+      }
+    },
+    "item": {
+      "item_id": 11,
+      "type": "Монета",
+      "wear_percent": 16,
+      "materials": [
+        {
+          "name": "Aurum",
+          "weight": 30.0,
+          "cost_per_gramm": 93.07
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 22,
+    "date": "2025-04-18T00:00:00",
+    "redemption_date": "2025-06-18T00:00:00",
+    "comission": 400.0,
+    "status": {
+      "redemption": "Not redeemed",
+      "sale": "Sold"
+    },
+    "client": {
+      "snils": 109,
+      "fullname": "Латыпов Арсен Айдарович",
+      "address": "Гагарина, 52",
+      "passport": {
+        "series": 1001,
+        "id": 100009
+      }
+    },
+    "item": {
+      "item_id": 12,
+      "type": "Часы",
+      "wear_percent": 14,
+      "materials": [
+        {
+          "name": "Titanium",
+          "weight": 130.0,
+          "cost_per_gramm": 0.21
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 23,
+    "date": "2025-07-23T00:00:00",
+    "redemption_date": "2025-09-23T00:00:00",
+    "comission": 340.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 109,
+      "fullname": "Латыпов Арсен Айдарович",
+      "address": "Гагарина, 52",
+      "passport": {
+        "series": 1001,
+        "id": 100009
+      }
+    },
+    "item": {
+      "item_id": 13,
+      "type": "Монета",
+      "wear_percent": 32,
+      "materials": [
+        {
+          "name": "Argentum",
+          "weight": 25.0,
+          "cost_per_gramm": 1.03
+        },
+        {
+          "name": "Platinum",
+          "weight": 3.0,
+          "cost_per_gramm": 31.45
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 24,
+    "date": "2025-03-12T00:00:00",
+    "redemption_date": "2025-04-12T00:00:00",
+    "comission": 220.0,
+    "status": {
+      "redemption": "Not redeemed",
+      "sale": "On sale"
+    },
+    "client": {
+      "snils": 110,
+      "fullname": "Энэнов Энэн Энэнович",
+      "address": "Энэнова, 0",
+      "passport": {
+        "series": 1001,
+        "id": 100010
+      }
+    },
+    "item": {
+      "item_id": 14,
+      "type": "Часы",
+      "wear_percent": 21,
+      "materials": [
+        {
+          "name": "Cuprum",
+          "weight": 125.0,
+          "cost_per_gramm": 0.01
+        },
+        {
+          "name": "Aurum",
+          "weight": 10.0,
+          "cost_per_gramm": 93.07
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 31,
+    "date": "2025-08-10T00:00:00",
+    "redemption_date": "2025-10-10T00:00:00",
+    "comission": 250.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 104,
+      "fullname": "Немчанинов Руслан Владимирович",
+      "address": "Родниковая, 11",
+      "passport": {
+        "series": 1001,
+        "id": 100004
+      }
+    },
+    "item": {
+      "item_id": 6,
+      "type": "Монета",
+      "wear_percent": 69,
+      "materials": [
+        {
+          "name": "Aurum",
+          "weight": 8.0,
+          "cost_per_gramm": 93.07
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 32,
+    "date": "2025-08-21T00:00:00",
+    "redemption_date": "2025-09-21T00:00:00",
+    "comission": 270.0,
+    "status": {
+      "redemption": "Redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 104,
+      "fullname": "Немчанинов Руслан Владимирович",
+      "address": "Родниковая, 11",
+      "passport": {
+        "series": 1001,
+        "id": 100004
+      }
+    },
+    "item": {
+      "item_id": 7,
+      "type": "Слиток",
+      "wear_percent": 88,
+      "materials": [
+        {
+          "name": "Aurum",
+          "weight": 1000.0,
+          "cost_per_gramm": 93.07
+        }
+      ]
+    }
+  },
+  {
+    "contract_number": 33,
+    "date": "2025-08-31T00:00:00",
+    "redemption_date": "2025-09-30T00:00:00",
+    "comission": 250.5,
+    "status": {
+      "redemption": "Not redeemed",
+      "sale": "Not on sale"
+    },
+    "client": {
+      "snils": 104,
+      "fullname": "Немчанинов Руслан Владимирович",
+      "address": "Родниковая, 11",
+      "passport": {
+        "series": 1001,
+        "id": 100004
+      }
+    },
+    "item": {
+      "item_id": 2,
+      "type": "Кольцо",
+      "wear_percent": 20,
+      "materials": [
+        {
+          "name": "Platinum",
+          "weight": 4.0,
+          "cost_per_gramm": 31.45
+        }
+      ]
+    }
+  }
+]
