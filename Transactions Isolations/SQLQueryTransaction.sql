@@ -4,6 +4,9 @@ use [Pawnshop_DB]
 -- ЗАДАНИЕ 1
 --===========
 
+-- Начало транзакции
+BEGIN TRANSACTION MainTransaction;
+
 -- Вставка тестового типа предмета
 SET IDENTITY_INSERT Item_Type ON;
 INSERT INTO Item_Type (ID, Name) VALUES (999, N'TEST');
@@ -14,11 +17,7 @@ SET IDENTITY_INSERT Item_Type OFF;
 SELECT 'ДО ТРАНЗАКЦИИ' as Этап, COUNT(*) as Количество_предметов 
 FROM Item WHERE Type_ID = 999;
 
--- Начало транзакции
-BEGIN TRANSACTION MainTransaction;
-
-    -- Точка сохранения перед основными изменениями
-    SAVE TRANSACTION BeforeChanges;
+    SAVE TRAN Before_Item;
 
     -- Вставка предмета
     INSERT INTO Item (Wear, Type_ID) VALUES (10, 999);
@@ -33,13 +32,17 @@ BEGIN TRANSACTION MainTransaction;
     INSERT INTO @TempTable SELECT ID FROM Item WHERE Type_ID = 999;
 
     -- Полный откат транзакции
-    ROLLBACK TRANSACTION MainTransaction;
+    ROLLBACK TRANSACTION Before_Item;
 
 SELECT 'ПОСЛЕ ОТКАТА' as Этап, 
        COUNT(*) as Записей_в_Item,
        CASE WHEN COUNT(*) = 0 THEN 'Данные удалены корректно' ELSE 'ОШИБКА: данные остались!' END as Статус
 FROM Item 
 WHERE ID IN (SELECT ID FROM @TempTable);
+
+COMMIT;
+
+SELECT * FROM Item_Type
 
 -- Транзакция с фиксацией
 BEGIN TRANSACTION FinalTransaction;
@@ -59,8 +62,9 @@ SELECT 'ДАННЫЕ ЗАФИКСИРОВАНЫ' as Этап,
 FROM Item 
 WHERE Type_ID = 999
 ORDER BY ID;
+-- КОНЕЦ ТРАНЗАКЦИИ
 
--- Удаление тестовый предметов
+-- Удаление тестовых предметов
 DELETE FROM Item WHERE Type_ID = 999
 
 -- Удаление тестового типа предмета

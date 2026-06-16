@@ -33,10 +33,9 @@ SELECT @current1 = Name FROM Item_Type WHERE ID = 888;
 PRINT 'USER1 Прочитал снова: ' + @current1;
 
 -- Шаг 6: Обновляем на основе прочитанного (затрет изменения USER2)
-DECLARE @initial1 nvarchar(50);
-SELECT @initial1 = Name FROM Item_Type WHERE ID = 888;
-UPDATE Item_Type SET Name = @initial1 + N'_USER1' WHERE ID = 888;
-PRINT 'USER1 Записал: ' + @initial1 + N'_USER1';
+UPDATE Item_Type SET Name = @current1 + N'_USER1' WHERE ID = 888;
+SELECT * FROM Item_Type WHERE ID = 888;
+PRINT 'USER1 Записал: ' + @current1 + N'_USER1';
 
 -- Шаг 7: Фиксируем
 COMMIT;

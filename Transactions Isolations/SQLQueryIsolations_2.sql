@@ -19,7 +19,7 @@ SELECT @initial2 = Name FROM Item_Type WHERE ID = 888;
 UPDATE Item_Type SET Name = @initial2 + N'_USER2' WHERE ID = 888;
 
 -- Шаг 4: Фиксируем раньше USER1
-COMMIT;
+ROLLBACK;
 
 -- Проверка (здесь видим USER2_USER1, но ожидали USER2)
 SELECT 'USER2 RESULT' as Источник, * FROM Item_Type WHERE ID = 888;
