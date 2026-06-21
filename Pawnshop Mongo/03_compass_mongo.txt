@@ -1,0 +1,293 @@
+// count ip address
+[
+  {
+    $match: {
+      ip_address: "50.17.117.28"
+    }
+  },
+  {
+    $count:
+      "total_visits"
+  }
+]
+
+// diff between max and min response by ip
+[
+  {
+    $group:
+            {
+        _id: "$ip_address",
+        max: {
+          $max: "$response_time_ms"
+        },
+        min: {
+          $min: "$response_time_ms"
+        }
+      }
+  },
+  {
+    $project:
+            {
+        _id: 0,
+        ip: "$_id",
+        diff: {
+          $subtract: ["$max", "$min"]
+        }
+      }
+  }
+]
+
+// ip 23.22.63.122 skip 2 limit 5
+[
+  {
+    $match:
+            {
+        ip_address: "23.22.63.122"
+      }
+  },
+  {
+    $skip:
+        2
+  },
+  {
+    $limit:
+        5
+  },
+  {
+    $project:
+      {
+        _id: 0,
+        page: 1,
+        visited_at: 1
+      }
+  }
+]
+
+// min max avg response
+[
+  {
+    $group: {
+      _id: null,
+      max: {
+        $max: "$response_time_ms"
+      },
+      min: {
+        $min: "$response_time_ms"
+      },
+      avg: {
+        $avg: "$response_time_ms"
+      }
+    }
+  }
+]
+
+// multiple field group by ip, day
+[
+  {
+    $group:
+      {
+        _id: {
+          ip: "$ip_address",
+          day: {
+            $dayOfMonth: "$visited_at"
+          }
+        },
+        sum: {
+          $sum: 1
+        }
+      }
+  },
+  {
+    $project:
+      {
+        _id: 0,
+        ip: "$_id.ip",
+        day: "$_id.day",
+        events: "$sum"
+      }
+  }
+]
+
+// total visits and avg resp time for every page
+[
+  {
+    $group:
+      {
+        _id: "$page",
+        visits: {
+          $sum: 1
+        },
+        avg_time: {
+          $avg: "$response_time_ms"
+        }
+      }
+  },
+  {
+    $match:
+      {
+        visits: {
+          $gte: 100
+        }
+      }
+  },
+  {
+    $project:
+      {
+        _id: 0,
+        page: "$_id",
+        visits: 1,
+        avg_time: 1
+      }
+  }
+]
+
+// total visits by hour
+[
+  {
+    $group:
+      /**
+       * _id: The id of the group.
+       * fieldN: The first field name.
+       */
+      {
+        _id: {
+          $hour: "$visited_at"
+        },
+        visits: {
+          $sum: 1
+        }
+      }
+  },
+  {
+    $sort:
+      {
+        _id: 1
+      }
+  },
+  {
+    $project:
+      {
+        _id: 0,
+        hour: "$_id",
+        visits: 1
+      }
+  }
+]
+
+// unique visiters and avg response time
+[
+  {
+    $match: {
+      visited_at: {
+        $gte: new Date("2013-12-01T00:00:00.000"),
+        $lt: new Date("2014-01-01T00:00:00.000")
+      }
+    }
+  },
+  {
+    $group:
+      {
+        _id: "$page",
+        avg_time: {
+          $avg: "$response_time_ms"
+        },
+        visiters: {
+          $addToSet: "$ip_address"
+        }
+      }
+  },
+  {
+    $project: {
+      _id: 0,
+      page: "$_id",
+      "avg time": "$avg_time",
+      visiters: {
+        $size: "$visiters"
+      }
+    }
+  }
+]
+
+// Visits from Linux
+[
+  {
+    $match: {
+      user_agent: {
+        $regex: "Linux"
+      }
+    }
+  },
+  {
+    $project: {
+      _id: 0,
+      ip_address: 1,
+      page: 1,
+      visited_at: 1
+    }
+  }
+]
+
+// Visits in 1st half of 2013-12 and response time gte 220
+[
+  {
+    $match: {
+      visited_at: {
+        $gte: new Date("2013-12-01T00:00:00")
+      },
+      visited_at: {
+        $lt: new Date("2013-12-16T00:00:00")
+      },
+      response_time_ms: {
+        $gte: 220
+      }
+    }
+  },
+  {
+    $sort:
+      {
+        response_time_ms: -1
+      }
+  },
+  {
+    $project: {
+      _id: 0,
+      visited_at: 1,
+      response_time_ms: 1,
+      page: 1
+    }
+  }
+]
+
+// visits in 2013-12
+[
+  {
+    $match: {
+      visited_at: {
+        $gte: new Date("2013-12-01T00:00:00.000"),
+        $lt: new Date("2014-01-01T00:00:00.000")
+      }
+    }
+  },
+  {
+    $group: {
+      _id: {
+        $dayOfMonth: "$visited_at"
+      },
+      visits: {
+        $sum: 1
+      }
+    }
+  },
+  {
+    $sort: {
+      visits: -1
+    }
+  },
+  {
+    $project: {
+      _id: 0,
+      Date: "$_id",
+      visits: 1
+    }
+  }
+]

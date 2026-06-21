@@ -1,0 +1,5 @@
+db["web_traffic"].mapReduce(
+  function() { emit(this.page, 1) }, // map: группировка (key, values)
+  function(key, values) { return Array.sum(values) }, // reduce: агрегация
+  { out: { inline: 1 } } // вывод в консоль
+)

@@ -1,0 +1,8 @@
+db["web_traffic"].mapReduce(
+  function() { emit(this.user_agent, this.response_time_ms) }, // map: группировка (key, values)
+  function(key, values) { return Array.sum(values) }, // reduce: агрегация
+  { 
+    out: { inline: 1 }, // вывод в консоль
+    query: { user_agent: { $regex: "Mozilla" } } // фильтрация
+  }
+)
