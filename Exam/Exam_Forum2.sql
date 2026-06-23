@@ -30,7 +30,7 @@ Begin
 	with replies as (
 		select
 			fp.PostID,
-			fp.PostTitle,
+			cast(fp.PostTitle as nvarchar(max)) as PostTitle,
 			fp.ReplyTo,
 			1 as lvl
 		from [dbo].[ForumPosts] fp
@@ -40,17 +40,60 @@ Begin
 
 		select
 			fp.PostID,
-			fp.PostTitle,
+			r.PostTitle + ' -> ' + cast(fp.PostTitle as nvarchar(max)),
 			fp.ReplyTo,
 			r.lvl + 1
 		from [dbo].[ForumPosts] fp
 		join replies r on r.ReplyTo = fp.PostID
 	)
 
-	select @ReplyTree = string_agg(cast(PostTitle as nvarchar(max)), '->') within group (order by lvl)
+	select @ReplyTree = PostTitle
 	from replies
 End
 
 declare @Tree nvarchar(max);
 exec GetReplyTree @PostID = 3, @ReplyTree = @Tree output;
 select @Tree as Tree;
+
+-- 7. Тригер: Не более 5 ответов на разные посты, содержащие один и тот же текст
+
+create or alter trigger ForumPost_LessOrEqual5ReplierWithSameBody
+on [dbo].[ForumPosts] instead of insert
+as
+Begin
+	declare @PostID int
+	declare @PostTitle varchar(100)
+	declare @PostBody varchar(100)
+	declare @OwnerID int
+	declare @ReplyTo int
+	declare @count int
+
+	declare cur cursor for
+	select PostID, PostTitle, PostBody, OwnerID, ReplyTo
+	from inserted
+
+	open cur
+
+	fetch next from cur
+	into @PostID, @PostTitle, @PostBody, @OwnerID, @ReplyTo
+
+	while @@FETCH_STATUS = 0
+	begin
+		-- посчитаем количество постов от этого автора с таким же текстом, которые являются ответами на другие посты
+		select @count = count(*)
+		from [dbo].[ForumPosts]
+		where OwnerID = @OwnerID
+		and ReplyTo is not null
+		and PostBody = @PostBody
+		group by OwnerID
+
+		if @count >= 5
+		begin
+			insert into [dbo].[ForumPosts]
+			values (@PostID, @PostTitle, @PostBody, @OwnerID, @ReplyTo)
+		end
+	end
+
+	close cur
+	deallocate cur
+End
