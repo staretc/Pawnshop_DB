@@ -78,6 +78,15 @@
         $avg: "$response_time_ms"
       }
     }
+  },
+  {
+    $project:
+      {
+        _id: 0,
+        min: 1,
+        max: 1,
+        avg: 1
+      }
   }
 ]
 
@@ -174,7 +183,7 @@
   }
 ]
 
-// unique visiters and avg response time
+// unique visiters and avg response time last month
 [
   {
     $match: {

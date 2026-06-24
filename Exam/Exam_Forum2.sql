@@ -92,6 +92,9 @@ Begin
 			insert into [dbo].[ForumPosts]
 			values (@PostID, @PostTitle, @PostBody, @OwnerID, @ReplyTo)
 		end
+
+		fetch next from cur
+		into @PostID, @PostTitle, @PostBody, @OwnerID, @ReplyTo
 	end
 
 	close cur

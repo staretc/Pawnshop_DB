@@ -1,0 +1,38 @@
+[
+  {
+    $unwind {
+      path $History
+    }
+  },
+  {
+    $group {
+      _id {
+        RobotId $History.RobotId,
+        CellCode $CellCode
+      },
+      PalletCount {
+        $sum 1
+      },
+      TotalWeight {
+        $sum $History.Weight
+      }
+    }
+  },
+  {
+    $sort {
+      PalletCount -1
+    }
+  },
+  {
+    $limit 1
+  },
+  {
+    $project {
+      _id 0,
+      RobotId $_id.RobotId,
+      CellCode $_id.CellCode,
+      PalletCount 1,
+      TotalWeight 1
+    }
+  }
+]

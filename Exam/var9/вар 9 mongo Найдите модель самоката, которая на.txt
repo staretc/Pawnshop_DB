@@ -1,0 +1,39 @@
+//Найдите модель самоката, которая наиболее часто использовалась за последний месяц и выведите суммарное количество минут использования этой модели.
+
+// 1. Map функция (с проверкой на наличие activeRides)
+var map = function() {
+    // Проверяем, есть ли поле activeRides и не пустое ли оно
+    if (this.activeRides && this.activeRides.length > 0) {
+        // Перебираем активные поездки
+        this.activeRides.forEach(function(ride) {
+            // Проверяем дату (за последний месяц)
+            var start = new Date(ride.startTime);
+            var now = new Date();
+            var monthAgo = new Date(now);
+            monthAgo.setMonth(now.getMonth() - 1);
+            
+            if (start >= monthAgo) {
+                // Считаем минуты от начала до сейчас
+                var minutes = Math.round((now - start) / 60000);
+                // Отправляем модель и минуты
+                emit(ride.scooterModel, minutes);
+            }
+        });
+    }
+};
+
+// 2. Reduce функция
+var reduce = function(model, minutes) {
+    var total = 0;
+    minutes.forEach(function(m) {
+        total = total + m;
+    });
+    return total;
+};
+
+// 3. Выполняем MapReduce на коллекции Scoot
+db.Scoot.mapReduce(
+    map,
+    reduce,
+    { out: { inline: 1 } }
+);

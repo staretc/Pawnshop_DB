@@ -1,0 +1,165 @@
+// 1. Посчитать количество посещений с  "ip_address":"50.17.117.28"
+[
+  {
+    $match: {
+      ip_address: "50.17.117.28"
+    }
+  },
+  {
+    $count:
+      "total_visits"
+  }
+]
+
+// 2. Вычислить среднее, максимальное и минимальное время ответа сервера.
+[
+  {
+    $group: {
+      _id: null,
+      max: {
+        $max: "$response_time_ms"
+      },
+      min: {
+        $min: "$response_time_ms"
+      },
+      avg: {
+        $avg: "$response_time_ms"
+      }
+    }
+  },
+  {
+    $project:
+      {
+        _id: 0,
+        min: 1,
+        max: 1,
+        avg: 1
+      }
+  }
+]
+
+
+// 3. Просчитать количество посещений сайта за Декабрь 2013 года.
+// Вывод:  Число, Количество посещений. Результат отсортировать по убыванию поля Количество посещений 
+[
+  {
+    $match: {
+      visited_at: {
+        $gte: new Date("2013-12-01T00:00:00.000"),
+        $lt: new Date("2014-01-01T00:00:00.000")
+      }
+    }
+  },
+  {
+    $group: {
+      _id: {
+        $dayOfMonth: "$visited_at"
+      },
+      visits: {
+        $sum: 1
+      }
+    }
+  },
+  {
+    $sort: {
+      visits: -1
+    }
+  },
+  {
+    $project: {
+      _id: 0,
+      Date: "$_id",
+      visits: 1
+    }
+  }
+]
+
+// 4. Для каждой страницы определить среднее время ответа сервера, а также количество уникальных IP, посетивших эту страницу за последний месяц.
+[
+  {
+    $group: {
+      _id: "$page",
+      avg_response_time: {
+        $avg: "$response_time_ms"
+      },
+      ips_last_month: {
+        $addToSet: {
+          $cond: {
+            if: {
+              $gte: [
+                "$visited_at",
+                {
+                  $dateSubtract: {
+                    startDate: "$$NOW",
+                    unit: "month",
+                    amount: 1
+                  }
+                }
+              ]
+            },
+            then: "$ip_address",
+            else: null
+          }
+        }
+      }
+    }
+  },
+  {
+    $project: {
+      _id: 0,
+      page: "$_id",
+      avg_response_time: 1,
+      unique_ips_count_last_month: {
+        $size: {
+          $filter: {
+            input: "$ips_last_month",
+            as: "ip",
+            cond: {
+              $ne: ["$$ip", null]
+            }
+          }
+        }
+      }
+    }
+  }
+]
+
+// ВАРИАНТ СО ВРЕМЕНЕМ ЗАДАННЫМ СТАТИКОЙ
+db.web_traffic.aggregate([
+  {
+    $group: {
+      // Группируем по названию страницы
+      _id: "$page",
+      // 1. Среднее время ответа сервера за весь период
+      avg_response_time: { $avg: "$response_time_ms" },
+      // Собираем уникальные IP за последний месяц (декабрь 2013)
+      ips_last_month: {
+        $addToSet: {
+          $cond: {
+            if: { $gte: ["$visited_at", ISODate("2013-12-01T00:00:00Z")] },
+            then: "$ip_address",
+            else: null
+          }
+        }
+      }
+    }
+  },
+  {
+    // Преобразуем структуру для красивого вывода
+    $project: {
+      _id: 0,
+      page: "$_id",
+      avg_response_time: 1,
+      // 2. Считаем количество уникальных IP, отфильтровав значение null
+      unique_ips_count_last_month: {
+        $size: {
+          $filter: {
+            input: "$ips_last_month",
+            as: "ip",
+            cond: { $ne: ["$$ip", null] }
+          }
+        }
+      }
+    }
+  }
+])
