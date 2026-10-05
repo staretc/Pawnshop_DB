@@ -55,8 +55,6 @@ ADD CONSTRAINT check_info_conflict CHECK (
 	(Redemption_Info = N'Not redeemed')
 )
 
-select * from Item_Type
-
 insert into Item_Type (Name)
 values
 	(N'TEST'),
