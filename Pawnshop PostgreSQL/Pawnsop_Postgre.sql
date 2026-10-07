@@ -1,4 +1,4 @@
--- Создание таблиц
+﻿-- Создание таблиц
 CREATE TABLE Item_Type (
     ID SERIAL PRIMARY KEY,
     Name VARCHAR(50) NOT NULL
@@ -51,12 +51,12 @@ CREATE TABLE Contract (
 );
 
 -- Здесь используем:
--- pg_class — хранит информацию о всех таблицах, индексах, представлениях и последовательностях. Поле relname хранит имя таблицы.
--- pg_attribute — хранит информацию о всех столбцах всех таблиц. Поле attname хранит имя столбца, а attnum — его номер.
--- pg_depend — системный граф зависимостей между объектами (аналог sys.sql_expression_dependencies). Связывает столбец (refobjsubid), таблицу (refobjid) и объекты кода/триггеры.
--- pg_proc — хранит информацию о хранимых функциях и процедурах (включая триггерные функции).
--- pg_trigger — хранит данные о триггерах, привязанных к конкретным таблицам.
--- Системные функции pg_get_functiondef() и pg_get_triggerdef() — извлекают полный T-SQL/PL-pgSQL исходный код функции или определение триггера.
+    -- pg_class — хранит информацию о всех таблицах, индексах, представлениях и последовательностях. Поле relname хранит имя таблицы.
+    -- pg_attribute — хранит информацию о всех столбцах всех таблиц. Поле attname хранит имя столбца, а attnum — его номер.
+    -- pg_depend — системный граф зависимостей между объектами (аналог sys.sql_expression_dependencies). Связывает столбец (refobjsubid), таблицу (refobjid) и объекты кода/триггеры.
+    -- pg_proc — хранит информацию о хранимых функциях и процедурах (включая триггерные функции).
+    -- pg_trigger — хранит данные о триггерах, привязанных к конкретным таблицам.
+    -- pg_get_functiondef() и pg_get_triggerdef() — извлекают полный T-SQL/PL-pgSQL исходный код функции или определение триггера.
 
 -- C параметризацией
 
@@ -74,37 +74,43 @@ AS $$
 DECLARE
     v_sql TEXT;
 BEGIN
-    -- Формируем текст запроса с плейсхолдерами $1 и $2
     v_sql := '
+        -- Ищем функции и процедуры, содержащие UPDATE/INSERT с указанным полем
         SELECT DISTINCT
             p.proname::NAME AS object_name,
-            ''FUNCTION / TRIGGER''::TEXT AS object_type,
+            CASE p.prokind
+                WHEN ''p'' THEN ''PROCEDURE''
+                ELSE ''FUNCTION''
+            END::TEXT AS object_type,
             pg_get_functiondef(p.oid)::TEXT AS code_definition
-        FROM pg_class c
-        JOIN pg_attribute a ON a.attrelid = c.oid
-        JOIN pg_depend d ON d.refobjid = c.oid AND d.refobjsubid = a.attnum
-        JOIN pg_rewrite r ON r.oid = d.objid
-        JOIN pg_depend d2 ON d2.objid = r.oid
-        JOIN pg_proc p ON p.oid = d2.refobjid
-        WHERE c.relname = $1
-          AND a.attname = $2
-          AND NOT a.attisdropped
-        
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname NOT IN (''pg_catalog'', ''information_schema'')
+          AND pg_get_functiondef(p.oid) ILIKE ''%'' || $1 || ''%''
+          AND pg_get_functiondef(p.oid) ILIKE ''%'' || $2 || ''%''
+          AND (
+              pg_get_functiondef(p.oid) ILIKE ''%UPDATE%'' 
+              OR pg_get_functiondef(p.oid) ILIKE ''%INSERT%''
+          )
+
         UNION
-        
+
+        -- Ищем триггеры, срабатывающие на UPDATE/INSERT для этой таблицы
         SELECT DISTINCT
             trg.tgname::NAME AS object_name,
             ''TRIGGER''::TEXT AS object_type,
             pg_get_triggerdef(trg.oid)::TEXT AS code_definition
-        FROM pg_class c
+        FROM pg_trigger trg
+        JOIN pg_class c ON c.oid = trg.tgrelid
         JOIN pg_attribute a ON a.attrelid = c.oid
-        JOIN pg_trigger trg ON trg.tgrelid = c.oid
         WHERE c.relname = $1
+          AND a.attname = $2
           AND NOT a.attisdropped
-          AND a.attname = $2;
+          AND NOT trg.tgisinternal
+          -- Типы триггеров: 4 = INSERT, 16 = UPDATE (или их комбинации)
+          AND (trg.tgtype & 4 <> 0 OR trg.tgtype & 16 <> 0);
     ';
 
-    -- Выполняем динамический SQL с параметрами USING
     RETURN QUERY EXECUTE v_sql USING p_table_name, p_column_name;
 END;
 $$;
@@ -126,21 +132,23 @@ AS $$
 DECLARE
     v_sql TEXT;
 BEGIN
-    -- Формируем запрос с явным экранированием через quote_literal
     v_sql := '
         SELECT DISTINCT
             p.proname::NAME AS object_name,
-            ''FUNCTION / TRIGGER''::TEXT AS object_type,
+            CASE p.prokind
+                WHEN ''p'' THEN ''PROCEDURE''
+                ELSE ''FUNCTION''
+            END::TEXT AS object_type,
             pg_get_functiondef(p.oid)::TEXT AS code_definition
-        FROM pg_class c
-        JOIN pg_attribute a ON a.attrelid = c.oid
-        JOIN pg_depend d ON d.refobjid = c.oid AND d.refobjsubid = a.attnum
-        JOIN pg_rewrite r ON r.oid = d.objid
-        JOIN pg_depend d2 ON d2.objid = r.oid
-        JOIN pg_proc p ON p.oid = d2.refobjid
-        WHERE c.relname = ' || quote_literal(p_table_name) || '
-          AND a.attname = ' || quote_literal(p_column_name) || '
-          AND NOT a.attisdropped
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname NOT IN (''pg_catalog'', ''information_schema'')
+          AND pg_get_functiondef(p.oid) ILIKE ''%'' || ' || quote_literal(p_table_name) || ' || ''%''
+          AND pg_get_functiondef(p.oid) ILIKE ''%'' || ' || quote_literal(p_column_name) || ' || ''%''
+          AND (
+              pg_get_functiondef(p.oid) ILIKE ''%UPDATE%'' 
+              OR pg_get_functiondef(p.oid) ILIKE ''%INSERT%''
+          )
 
         UNION
 
@@ -148,17 +156,33 @@ BEGIN
             trg.tgname::NAME AS object_name,
             ''TRIGGER''::TEXT AS object_type,
             pg_get_triggerdef(trg.oid)::TEXT AS code_definition
-        FROM pg_class c
+        FROM pg_trigger trg
+        JOIN pg_class c ON c.oid = trg.tgrelid
         JOIN pg_attribute a ON a.attrelid = c.oid
-        JOIN pg_trigger trg ON trg.tgrelid = c.oid
         WHERE c.relname = ' || quote_literal(p_table_name) || '
+          AND a.attname = ' || quote_literal(p_column_name) || '
           AND NOT a.attisdropped
-          AND a.attname = ' || quote_literal(p_column_name) || ';
+          AND NOT trg.tgisinternal
+          AND (trg.tgtype & 4 <> 0 OR trg.tgtype & 16 <> 0);
     ';
 
-    -- Выполняем динамический запрос без параметрического блока
     RETURN QUERY EXECUTE v_sql;
 END;
 $$;
 
 SELECT * FROM find_objects_modifying_column_exec('item', 'wear');
+
+-- Тестовая процедура
+
+CREATE OR REPLACE PROCEDURE update_contract_commission(
+    p_contract_number INT,
+    p_new_commission MONEY
+)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    UPDATE Contract
+    SET Comission = p_new_commission
+    WHERE Number = p_contract_number;
+END;
+$$;
