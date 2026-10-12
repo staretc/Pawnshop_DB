@@ -1,22 +1,23 @@
 use [Pawnshop_DB]
 
--- Представление: вывести все таблицы SQL Server с разными видами триггеров
+-- Процедура: вывести все таблицы SQL Server с разными видами триггеров
 -- Реализация через:
     -- information_schema - ISO-стандарт, хранящий метаданные об объектах в БД
         -- tables - хранит информацию о таблицах
     -- системные представления sys - каталоги MSSQL, хранящие более детальную информацию (в данном случае - тип триггера)
         -- tables - хранит информацию о таблицах
 
-CREATE OR ALTER VIEW vw_TablesWithTriggerTypes
-AS
+-- внутреннее представление: собирает данные по всем таблицам и группирует их триггеры по типам
+CREATE OR ALTER VIEW vw_TablesWithTriggerTypes AS
 SELECT 
     t.TABLE_CATALOG AS [DatabaseName],
     t.TABLE_SCHEMA  AS [SchemaName],
     t.TABLE_NAME    AS [TableName],
-    -- Названия триггеров по типам
+    -- AFTER триггеры
     STRING_AGG(CASE WHEN tr.is_instead_of_trigger = 0 AND OBJECTPROPERTY(tr.object_id, 'ExecIsInsertTrigger') = 1 THEN tr.name END, ', ') AS [After_Insert_Triggers],
     STRING_AGG(CASE WHEN tr.is_instead_of_trigger = 0 AND OBJECTPROPERTY(tr.object_id, 'ExecIsUpdateTrigger') = 1 THEN tr.name END, ', ') AS [After_Update_Triggers],
     STRING_AGG(CASE WHEN tr.is_instead_of_trigger = 0 AND OBJECTPROPERTY(tr.object_id, 'ExecIsDeleteTrigger') = 1 THEN tr.name END, ', ') AS [After_Delete_Triggers],
+    -- INSTEAD OF триггеры
     STRING_AGG(CASE WHEN tr.is_instead_of_trigger = 1 AND OBJECTPROPERTY(tr.object_id, 'ExecIsInsertTrigger') = 1 THEN tr.name END, ', ') AS [InsteadOf_Insert_Triggers],
     STRING_AGG(CASE WHEN tr.is_instead_of_trigger = 1 AND OBJECTPROPERTY(tr.object_id, 'ExecIsUpdateTrigger') = 1 THEN tr.name END, ', ') AS [InsteadOf_Update_Triggers],
     STRING_AGG(CASE WHEN tr.is_instead_of_trigger = 1 AND OBJECTPROPERTY(tr.object_id, 'ExecIsDeleteTrigger') = 1 THEN tr.name END, ', ') AS [InsteadOf_Delete_Triggers]
@@ -30,8 +31,38 @@ WHERE t.TABLE_TYPE = 'BASE TABLE'
 GROUP BY t.TABLE_CATALOG, t.TABLE_SCHEMA, t.TABLE_NAME;
 GO
 
+-- Процедура: проверяет наличие схемы и возвращает отфильтрованные данные из представления
+CREATE OR ALTER PROCEDURE GetTablesWithTriggersBySchema
+    @SchemaName NVARCHAR(128) = N'dbo' -- Параметр схемы с дефолтным значением dbo
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- 1. Обработка ошибки: проверка существования схемы в базе данных
+    IF NOT EXISTS (SELECT 1 FROM sys.schemas WHERE name = @SchemaName)
+    BEGIN
+        RAISERROR(N'Ошибка: Схема "%s" не существует в текущей базе данных.', 16, 1, @SchemaName);
+        RETURN;
+    END
+
+    -- 2. Вывод результатов из представления с фильтрацией по схеме
+    SELECT 
+        [DatabaseName],
+        [SchemaName],
+        [TableName],
+        [After_Insert_Triggers],
+        [After_Update_Triggers],
+        [After_Delete_Triggers],
+        [InsteadOf_Insert_Triggers],
+        [InsteadOf_Update_Triggers],
+        [InsteadOf_Delete_Triggers]
+    FROM vw_TablesWithTriggerTypes
+    WHERE [SchemaName] = @SchemaName;
+END;
+GO
+
 -- Вызов
-SELECT * FROM vw_TablesWithTriggerTypes;
+EXEC GetTablesWithTriggersBySchema @SchemaName = N'dbo';
 
 -- Хранимая процедура: для указанного объекта, заданного именем и схемой, выводятся все его свойства.
 -- В качестве объекта может выступать таблица, представление, ограничение, функция, процедура или триггер.
@@ -71,8 +102,7 @@ BEGIN
         RETURN;
     END
 
-
-    -- ОБЩИЕ СВЕДЕНИЯ (Имя, тип, владелец, дата создания и модификации)
+    -- 1. ОБЩИЕ СВЕДЕНИЯ (Имя, тип, владелец, дата создания и модификации)
     SELECT 
         o.object_id AS [ObjectId],
         s.name AS [SchemaName],
@@ -85,8 +115,17 @@ BEGIN
     JOIN sys.schemas s ON o.schema_id = s.schema_id
     WHERE o.object_id = @ObjectId;
 
+    -- ОБЩИЕ ЗАВИСИМОСТИ: ОБЪЕКТЫ, ССЫЛАЮЩИЕСЯ НА ДАННЫЙ ОБЪЕКТ (КТО НА НЕГО ССЫЛАЕТСЯ)
+    SELECT DISTINCT
+        s.name AS [ReferencingSchema],
+        o.name AS [ReferencingObjectName],
+        o.type_desc AS [ReferencingObjectType]
+    FROM sys.sql_expression_dependencies d
+    JOIN sys.objects o ON d.referencing_id = o.object_id
+    JOIN sys.schemas s ON o.schema_id = s.schema_id
+    WHERE d.referenced_id = @ObjectId;
 
-    -- ПРИВИЛЕГИИ И ЗАПРЕТЫ (GRANT / DENY / REVOKE)
+    -- 2. ПРИВИЛЕГИИ И ЗАПРЕТЫ (GRANT / DENY / REVOKE)
     SELECT 
         dp.class_desc AS [PermissionClass],
         grantee.name AS [GranteePrincipal],
@@ -98,8 +137,7 @@ BEGIN
     JOIN sys.database_principals grantor ON dp.grantor_principal_id = grantor.principal_id
     WHERE dp.major_id = @ObjectId;
 
-
-    -- СВОЙСТВА, ЗАВИСЯЩИЕ ОТ ТИПА ОБЪЕКТА
+    -- 3. СВОЙСТВА, ЗАВИСЯЩИЕ ОТ ТИПА ОБЪЕКТА
     DECLARE @Type NVARCHAR(60) = (SELECT type FROM sys.objects WHERE object_id = @ObjectId);
 
     -- ТАБЛИЦЫ (U) И ПРЕДСТАВЛЕНИЯ (V)
@@ -205,9 +243,23 @@ BEGIN
         FROM sys.objects o
         JOIN sys.objects parent ON o.parent_object_id = parent.object_id
         WHERE o.object_id = @ObjectId;
+
+        -- Исходный код выражения для CHECK-ограничений
+        IF @Type = 'C'
+        BEGIN
+            SELECT 
+                definition AS [CheckConstraintDefinition]
+            FROM sys.check_constraints
+            WHERE object_id = @ObjectId;
+        END
     END
 END;
 GO
 
 -- Вызов
-EXEC sp_GetObjectProperties @SchemaName = N'dbo', @ObjectName = N'Contract';
+EXEC sp_GetObjectProperties @SchemaName = N'dbo', @ObjectName = N'check_info_conflict';
+
+EXEC sp_GetObjectProperties @SchemaName = N'dbo', @ObjectName = N'ClientsWithNotRedeemedState';
+
+create view testview as 
+select * from dbo.[ClientsWithNotRedeemedState]()
