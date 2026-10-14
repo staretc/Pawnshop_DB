@@ -56,16 +56,14 @@ CREATE TABLE Contract (
 -- Определить какие объекты в БД (процедуры, функции, триггеры) могут изменять содержимое этого поля.
 
 -- Здесь используем:
-    -- pg_class — хранит информацию о всех таблицах, индексах, представлениях и последовательностях. Поле relname хранит имя таблицы.
-    -- pg_attribute — хранит информацию о всех столбцах всех таблиц. Поле attname хранит имя столбца, а attnum — его номер.
-    -- pg_depend — системный граф зависимостей между объектами (аналог sys.sql_expression_dependencies). Связывает столбец (refobjsubid), таблицу (refobjid) и объекты кода/триггеры.
-    -- pg_proc — хранит информацию о хранимых функциях и процедурах (включая триггерные функции).
-    -- pg_trigger — хранит данные о триггерах, привязанных к конкретным таблицам.
-    -- pg_get_functiondef() и pg_get_triggerdef() — извлекают полный T-SQL/PL-pgSQL исходный код функции или определение триггера.
+    -- pg_namespace — хранит информацию о схемах базы данных. Используется для проверки существования схемы по её имени (nspname) и связывания таблиц/функций со схемами (oid).
+    -- pg_class — хранит информацию о всех таблицах, индексах, представлениях и последовательностях. Используется для валидации существования таблиц (relkind = 'r', relname) и связывания с триггерами и столбцами.
+    -- pg_attribute — хранит информацию о всех столбцах всех таблиц. Поле attname хранит имя столбца, attnum — его номер (используется для проверки триггеров по конкретным полям), а attisdropped отслеживает удалённые столбцы.
+    -- pg_proc — хранит информацию о хранимых функциях и процедурах. Поле prokind определяет тип объекта ('f' — функция, 'p' — процедура), а oid используется для извлечения исходного кода.
+    -- pg_trigger — хранит данные о триггерах, привязанных к таблицам. Поле tgtype содержит битовую маску типов срабатывания (INSERT, UPDATE, DELETE), tgattr хранит затронутые столбцы, а tgisinternal исключает служебные триггеры.
+    -- pg_get_functiondef() и pg_get_triggerdef() — системные функции, извлекающие исходный текст тела функции/процедуры (для поиска вхождения имен таблиц, столбцов и ключевых слов UPDATE/INSERT/DELETE) и DDL-определение триггера соответственно.
 
 -- C параметризацией
-
--- 1. Функция с параметризацией (аналог sp_executesql)
 CREATE OR REPLACE FUNCTION find_objects_modifying_column_using(
     p_schema_name VARCHAR,
     p_table_name VARCHAR,
@@ -87,7 +85,7 @@ BEGIN
         RAISE EXCEPTION 'Схема "%" не найдена в базе данных.', p_schema_name;
     END IF;
 
-    -- 2. Валидация существования таблицы в указанной схеме
+    -- 2. Валидация существования таблицы
     IF NOT EXISTS (
         SELECT 1 FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -98,7 +96,7 @@ BEGIN
         RAISE EXCEPTION 'Таблица "%" не найдена в схеме "%".', p_table_name, p_schema_name;
     END IF;
 
-    -- 3. Валидация существования столбца в таблице
+    -- 3. Валидация существования столбца
     IF NOT EXISTS (
         SELECT 1 FROM pg_attribute a
         JOIN pg_class c ON c.oid = a.attrelid
@@ -111,23 +109,29 @@ BEGIN
         RAISE EXCEPTION 'Столбец "%" не найден в таблице "%"."%".', p_column_name, p_schema_name, p_table_name;
     END IF;
 
-    -- 4. Формирование динамического запроса с параметрами ($1 = схема, $2 = таблица, $3 = столбец)
+    -- 4. Формирование динамического запроса с параметрами
     v_sql := $sql$
+        -- Изолируем выборку функций через подзапрос, исключая агрегаты (prokind = 'a')
         SELECT DISTINCT
-            p.proname::NAME AS object_name,
-            CASE p.prokind
+            sub.proname::NAME AS object_name,
+            CASE sub.prokind
                 WHEN 'p' THEN 'PROCEDURE'
                 ELSE 'FUNCTION'
             END::TEXT AS object_type,
-            pg_get_functiondef(p.oid)::TEXT AS code_definition
-        FROM pg_proc p
-        JOIN pg_namespace n ON n.oid = p.pronamespace
+            pg_get_functiondef(sub.oid)::TEXT AS code_definition
+        FROM (
+            SELECT p.oid, p.proname, p.prokind, p.pronamespace
+            FROM pg_proc p
+            WHERE p.prokind IN ('f', 'p')
+        ) sub
+        JOIN pg_namespace n ON n.oid = sub.pronamespace
         WHERE n.nspname = $1
-          AND pg_get_functiondef(p.oid) ILIKE '%' || $2 || '%'
-          AND pg_get_functiondef(p.oid) ILIKE '%' || $3 || '%'
+          AND pg_get_functiondef(sub.oid) ILIKE '%' || $2 || '%'
+          AND pg_get_functiondef(sub.oid) ILIKE '%' || $3 || '%'
           AND (
-              pg_get_functiondef(p.oid) ILIKE '%UPDATE%' 
-              OR pg_get_functiondef(p.oid) ILIKE '%INSERT%'
+              pg_get_functiondef(sub.oid) ILIKE '%UPDATE%' 
+              OR pg_get_functiondef(sub.oid) ILIKE '%INSERT%'
+              OR pg_get_functiondef(sub.oid) ILIKE '%DELETE%'
           )
 
         UNION
@@ -143,19 +147,19 @@ BEGIN
           AND c.relname = $2
           AND NOT trg.tgisinternal
           AND (
-              -- INSERT триггеры срабатывают на всю таблицу
               (trg.tgtype & 4 <> 0)
               OR
-              -- UPDATE триггеры: либо табличные (tgattr пустой), либо строго для данного столбца
+              (trg.tgtype & 1 <> 0)
+              OR
               (trg.tgtype & 16 <> 0 AND (
-                  trg.tgattr::text = '' 
+                  COALESCE(cardinality(trg.tgattr::int2[]), 0) = 0
                   OR (
-                      SELECT a.attnum::text 
+                      SELECT a.attnum 
                       FROM pg_attribute a 
                       WHERE a.attrelid = c.oid 
                         AND a.attname = $3 
                         AND NOT a.attisdropped
-                    ) = ANY(string_to_array(trg.tgattr::text, ' '))
+                  ) = ANY(trg.tgattr::int2[])
               ))
           );
     $sql$;
@@ -220,23 +224,28 @@ BEGIN
         RAISE EXCEPTION 'Столбец "%" не найден в таблице "%"."%".', p_column_name, p_schema_name, p_table_name;
     END IF;
 
-    -- 4. Формирование динамического запроса без параметризации (интерполяция через %L)
+    -- 4. Формирование динамического запроса с интерполяцией через format()
     v_sql := format('
         SELECT DISTINCT
-            p.proname::NAME AS object_name,
-            CASE p.prokind
+            sub.proname::NAME AS object_name,
+            CASE sub.prokind
                 WHEN ''p'' THEN ''PROCEDURE''
                 ELSE ''FUNCTION''
             END::TEXT AS object_type,
-            pg_get_functiondef(p.oid)::TEXT AS code_definition
-        FROM pg_proc p
-        JOIN pg_namespace n ON n.oid = p.pronamespace
+            pg_get_functiondef(sub.oid)::TEXT AS code_definition
+        FROM (
+            SELECT p.oid, p.proname, p.prokind, p.pronamespace
+            FROM pg_proc p
+            WHERE p.prokind IN (''f'', ''p'')
+        ) sub
+        JOIN pg_namespace n ON n.oid = sub.pronamespace
         WHERE n.nspname = %1$L
-          AND pg_get_functiondef(p.oid) ILIKE ''%%'' || %2$L || ''%%''
-          AND pg_get_functiondef(p.oid) ILIKE ''%%'' || %3$L || ''%%''
+          AND pg_get_functiondef(sub.oid) ILIKE ''%%'' || %2$L || ''%%''
+          AND pg_get_functiondef(sub.oid) ILIKE ''%%'' || %3$L || ''%%''
           AND (
-              pg_get_functiondef(p.oid) ILIKE ''%%UPDATE%%'' 
-              OR pg_get_functiondef(p.oid) ILIKE ''%%INSERT%%''
+              pg_get_functiondef(sub.oid) ILIKE ''%%UPDATE%%'' 
+              OR pg_get_functiondef(sub.oid) ILIKE ''%%INSERT%%''
+              OR pg_get_functiondef(sub.oid) ILIKE ''%%DELETE%%''
           )
 
         UNION
@@ -254,15 +263,17 @@ BEGIN
           AND (
               (trg.tgtype & 4 <> 0)
               OR
+              (trg.tgtype & 1 <> 0)
+              OR
               (trg.tgtype & 16 <> 0 AND (
-                  trg.tgattr::text = '' 
+                  COALESCE(cardinality(trg.tgattr::int2[]), 0) = 0
                   OR (
-                      SELECT a.attnum::text 
+                      SELECT a.attnum 
                       FROM pg_attribute a 
                       WHERE a.attrelid = c.oid 
                         AND a.attname = %3$L 
                         AND NOT a.attisdropped
-                    ) = ANY(string_to_array(trg.tgattr::text, '' ''))
+                  ) = ANY(trg.tgattr::int2[])
               ))
           );
     ', p_schema_name, p_table_name, p_column_name);
@@ -282,7 +293,6 @@ $$;
 SELECT * FROM find_objects_modifying_column_exec('Pawnshop_DB', 'contract', 'comission');
 
 -- Тестовая процедура
-
 CREATE OR REPLACE PROCEDURE update_contract_commission(
     p_contract_number INT,
     p_new_commission MONEY
